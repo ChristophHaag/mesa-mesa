@@ -26,6 +26,7 @@
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
 #include "main/fbobject.h"
+#include "main/framebuffer.h"
 
 static void
 gen8_upload_sf_clip_viewport(struct brw_context *brw)
@@ -86,17 +87,33 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
       vp[10] = -gby; /* y-min */
       vp[11] =  gby; /* y-max */
 
-      /* Screen Space Viewport */
-      if (render_to_fbo) {
-         vp[12] = ctx->DrawBuffer->_Xmin;
-         vp[13] = ctx->DrawBuffer->_Xmax - 1;
-         vp[14] = ctx->DrawBuffer->_Ymin;
-         vp[15] = ctx->DrawBuffer->_Ymax - 1;
+      int bbox[4];
+
+      _mesa_scissor_bounding_box(ctx, ctx->DrawBuffer, i, bbox);
+
+      if (bbox[0] == bbox[1] || bbox[2] == bbox[3]) {
+         /* If the scissor was out of bounds and got clamped to 0 width/height
+          * at the bounds, the subtraction of 1 from maximums could produce a
+          * negative number and thus not clip anything.  Instead, just provide
+          * a min > max scissor inside the bounds, which produces the expected
+          * no rendering.
+          */
+         vp[12] = 1;
+         vp[13] = 0;
+         vp[14] = 1;
+         vp[15] = 0;
+      } else if (render_to_fbo) {
+         /* texmemory: Y=0=bottom */
+         vp[12] = bbox[0];
+         vp[13] = bbox[1] - 1;
+         vp[14] = bbox[2];
+         vp[15] = bbox[3] - 1;
       } else {
-         vp[12] = ctx->DrawBuffer->_Xmin;
-         vp[13] = ctx->DrawBuffer->_Xmax - 1;
-         vp[14] = ctx->DrawBuffer->Height - ctx->DrawBuffer->_Ymax;
-         vp[15] = ctx->DrawBuffer->Height - ctx->DrawBuffer->_Ymin - 1;
+         /* memory: Y=0=top */
+         vp[12] = bbox[0];
+         vp[13] = bbox[1] - 1;
+         vp[14] = ctx->DrawBuffer->Height - bbox[3];
+         vp[15] = ctx->DrawBuffer->Height - bbox[2] - 1;
       }
 
       vp += 16;
