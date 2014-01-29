@@ -87,6 +87,12 @@ gen8_emit_vertices(struct brw_context *brw)
                 (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
                 (BRW_VE1_COMPONENT_STORE_1_FLT << BRW_VE1_COMPONENT_3_SHIFT));
       ADVANCE_BATCH();
+
+      BEGIN_BATCH(3);
+      OUT_BATCH(_3DSTATE_VF_INSTANCING << 16 | (3 - 2));
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
       return;
    }
 
