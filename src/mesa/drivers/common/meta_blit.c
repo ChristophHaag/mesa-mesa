@@ -32,6 +32,7 @@
 #include "main/depth.h"
 #include "main/enable.h"
 #include "main/fbobject.h"
+#include "main/image.h"
 #include "main/macros.h"
 #include "main/matrix.h"
 #include "main/readpix.h"
@@ -297,6 +298,14 @@ _mesa_meta_BlitFramebuffer(struct gl_context *ctx,
                            GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                            GLbitfield mask, GLenum filter)
 {
+
+   if (!_mesa_clip_blit(ctx,
+                        &srcX0, &srcY0, &srcX1, &srcY1,
+                        &dstX0, &dstY0, &dstX1, &dstY1)) {
+      /* Everything was clipped away. */
+      return;
+   }
+
    struct blit_state *blit = &ctx->Meta->Blit;
    struct temp_texture *tex = _mesa_meta_get_temp_texture(ctx);
    struct temp_texture *depthTex = _mesa_meta_get_temp_depth_texture(ctx);
