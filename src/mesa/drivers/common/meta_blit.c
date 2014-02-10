@@ -378,13 +378,24 @@ blitframebuffer_texture(struct gl_context *ctx,
    _mesa_SamplerParameteri(sampler, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
    _mesa_SamplerParameteri(sampler, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-   /* Always do our blits with no sRGB decode or encode.  Note that
-    * GL_FRAMEBUFFER_SRGB has already been disabled by
-    * _mesa_meta_begin().
+   /* Always do our blits with no net sRGB decode or encode.  Note that
+    * GL_FRAMEBUFFER_SRGB has already been disabled by _mesa_meta_begin().
+    *
+    * However, if both the src and dst can be srgb decode/encoded, choose thta
+    * so that we do any blending (from scaling or from MSAA resolves) in the
+    * right colorspace.
     */
    if (ctx->Extensions.EXT_texture_sRGB_decode) {
-      _mesa_SamplerParameteri(sampler, GL_TEXTURE_SRGB_DECODE_EXT,
-                              GL_SKIP_DECODE_EXT);
+      if (_mesa_get_format_color_encoding(rb->Format) == GL_SRGB &&
+          ctx->DrawBuffer->Visual.sRGBCapable) {
+         _mesa_SamplerParameteri(sampler, GL_TEXTURE_SRGB_DECODE_EXT,
+                                 GL_DECODE_EXT);
+         _mesa_set_framebuffer_srgb(ctx, GL_TRUE);
+      } else {
+         _mesa_SamplerParameteri(sampler, GL_TEXTURE_SRGB_DECODE_EXT,
+                                 GL_SKIP_DECODE_EXT);
+         /* set_framebuffer_srgb was set by _mesa_meta_begin(). */
+      }
    }
 
    if (!glsl_version) {
