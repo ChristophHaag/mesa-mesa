@@ -751,98 +751,6 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
    }
 }
 
-/**
- * Try to do a glBlitFramebuffer using glCopyTexSubImage2D
- * We can do this when the dst renderbuffer is actually a texture and
- * there is no scaling, mirroring or scissoring.
- *
- * \return new buffer mask indicating the buffers left to blit using the
- *         normal path.
- */
-static GLbitfield
-intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
-                                    GLint srcX0, GLint srcY0,
-                                    GLint srcX1, GLint srcY1,
-                                    GLint dstX0, GLint dstY0,
-                                    GLint dstX1, GLint dstY1,
-                                    GLbitfield mask, GLenum filter)
-{
-   struct brw_context *brw = brw_context(ctx);
-
-   /* Sync up the state of window system buffers.  We need to do this before
-    * we go looking for the buffers.
-    */
-   intel_prepare_render(brw);
-
-   if (mask & GL_COLOR_BUFFER_BIT) {
-      GLint i;
-      const struct gl_framebuffer *drawFb = ctx->DrawBuffer;
-      const struct gl_framebuffer *readFb = ctx->ReadBuffer;
-      struct gl_renderbuffer *src_rb = readFb->_ColorReadBuffer;
-      struct intel_renderbuffer *src_irb = intel_renderbuffer(src_rb);
-
-      if (!src_irb) {
-         perf_debug("glBlitFramebuffer(): missing src renderbuffer.  "
-                    "Falling back to software rendering.\n");
-         return mask;
-      }
-
-      /* If the source and destination are the same size with no mirroring,
-       * the rectangles are within the size of the texture and there is no
-       * scissor, then we can probably use the blit engine.
-       */
-      if (!(srcX0 - srcX1 == dstX0 - dstX1 &&
-            srcY0 - srcY1 == dstY0 - dstY1 &&
-            srcX1 >= srcX0 &&
-            srcY1 >= srcY0 &&
-            srcX0 >= 0 && srcX1 <= readFb->Width &&
-            srcY0 >= 0 && srcY1 <= readFb->Height &&
-            dstX0 >= 0 && dstX1 <= drawFb->Width &&
-            dstY0 >= 0 && dstY1 <= drawFb->Height &&
-            !(ctx->Scissor.EnableFlags))) {
-         perf_debug("glBlitFramebuffer(): non-1:1 blit.  "
-                    "Falling back to software rendering.\n");
-         return mask;
-      }
-
-      /* Blit to all active draw buffers.  We don't do any pre-checking,
-       * because we assume that copying to MRTs is rare, and failure midway
-       * through copying is even more rare.  Even if it was to occur, it's
-       * safe to let meta start the copy over from scratch, because
-       * glBlitFramebuffer completely overwrites the destination pixels, and
-       * results are undefined if any destination pixels have a dependency on
-       * source pixels.
-       */
-      for (i = 0; i < ctx->DrawBuffer->_NumColorDrawBuffers; i++) {
-         struct gl_renderbuffer *dst_rb = ctx->DrawBuffer->_ColorDrawBuffers[i];
-         struct intel_renderbuffer *dst_irb = intel_renderbuffer(dst_rb);
-
-         if (!dst_irb) {
-            perf_debug("glBlitFramebuffer(): missing dst renderbuffer.  "
-                       "Falling back to software rendering.\n");
-            return mask;
-         }
-
-         if (!intel_miptree_blit(brw,
-                                 src_irb->mt,
-                                 src_irb->mt_level, src_irb->mt_layer,
-                                 srcX0, srcY0, src_rb->Name == 0,
-                                 dst_irb->mt,
-                                 dst_irb->mt_level, dst_irb->mt_layer,
-                                 dstX0, dstY0, dst_rb->Name == 0,
-                                 dstX1 - dstX0, dstY1 - dstY0, GL_COPY)) {
-            perf_debug("glBlitFramebuffer(): unknown blit failure.  "
-                       "Falling back to software rendering.\n");
-            return mask;
-         }
-      }
-
-      mask &= ~GL_COLOR_BUFFER_BIT;
-   }
-
-   return mask;
-}
-
 static void
 intel_blit_framebuffer(struct gl_context *ctx,
                        GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
@@ -857,15 +765,6 @@ intel_blit_framebuffer(struct gl_context *ctx,
       if (mask == 0x0)
          return;
    }
-
-   /* Try using the BLT engine. */
-   mask = intel_blit_framebuffer_with_blitter(ctx,
-                                              srcX0, srcY0, srcX1, srcY1,
-                                              dstX0, dstY0, dstX1, dstY1,
-                                              mask, filter);
-   if (mask == 0x0)
-      return;
-
 
    _mesa_meta_BlitFramebuffer(ctx,
                               srcX0, srcY0, srcX1, srcY1,
