@@ -449,6 +449,9 @@ log_uniform(const void *values, enum glsl_base_type basicType,
       case GLSL_TYPE_FLOAT:
 	 printf("%g ", v[i].f);
 	 break;
+      case GLSL_TYPE_DOUBLE:
+	 printf("%g ", *(double* )&v[i * 2].f);
+	 break;
       default:
 	 assert(!"Should not get here.");
 	 break;
@@ -509,11 +512,11 @@ _mesa_propagate_uniforms_to_driver_storage(struct gl_uniform_storage *uni,
     */
    const unsigned components = MAX2(1, uni->type->vector_elements);
    const unsigned vectors = MAX2(1, uni->type->matrix_columns);
-
+   const int dmul = uni->type->base_type == GLSL_TYPE_DOUBLE ? 2 : 1;
    /* Store the data in the driver's requested type in the driver's storage
     * areas.
     */
-   unsigned src_vector_byte_stride = components * 4;
+   unsigned src_vector_byte_stride = components * 4 * dmul;
 
    for (i = 0; i < uni->num_driver_storage; i++) {
       struct gl_uniform_driver_storage *const store = &uni->driver_storage[i];
@@ -589,6 +592,7 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
    unsigned components;
    unsigned src_components;
    enum glsl_base_type basicType;
+   int size_mul = 1;
 
    struct gl_uniform_storage *const uni =
       validate_uniform_parameters(ctx, shProg, location, count,
@@ -647,6 +651,26 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
       basicType = GLSL_TYPE_INT;
       src_components = 4;
       break;
+   case GL_DOUBLE:
+      basicType = GLSL_TYPE_DOUBLE;
+      src_components = 1;
+      size_mul = 2;
+      break;
+   case GL_DOUBLE_VEC2:
+      basicType = GLSL_TYPE_DOUBLE;
+      src_components = 2;
+      size_mul = 2;
+      break;
+   case GL_DOUBLE_VEC3:
+      basicType = GLSL_TYPE_DOUBLE;
+      src_components = 3;
+      size_mul = 2;
+      break;
+   case GL_DOUBLE_VEC4:
+      basicType = GLSL_TYPE_DOUBLE;
+      src_components = 4;
+      size_mul = 2;
+      break;
    case GL_BOOL:
    case GL_BOOL_VEC2:
    case GL_BOOL_VEC3:
@@ -660,6 +684,15 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
    case GL_FLOAT_MAT4x2:
    case GL_FLOAT_MAT4x3:
    case GL_FLOAT_MAT4:
+   case GL_DOUBLE_MAT2:
+   case GL_DOUBLE_MAT2x3:
+   case GL_DOUBLE_MAT2x4:
+   case GL_DOUBLE_MAT3x2:
+   case GL_DOUBLE_MAT3:
+   case GL_DOUBLE_MAT3x4:
+   case GL_DOUBLE_MAT4x2:
+   case GL_DOUBLE_MAT4x3:
+   case GL_DOUBLE_MAT4:
    default:
       _mesa_problem(NULL, "Invalid type in %s", __func__);
       return;
@@ -674,7 +707,7 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
    bool match;
    switch (uni->type->base_type) {
    case GLSL_TYPE_BOOL:
-      match = true;
+      match = (basicType != GLSL_TYPE_DOUBLE);
       break;
    case GLSL_TYPE_SAMPLER:
    case GLSL_TYPE_IMAGE:
@@ -766,7 +799,7 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
     */
    if (!uni->type->is_boolean()) {
       memcpy(&uni->storage[components * offset], values,
-	     sizeof(uni->storage[0]) * components * count);
+	     sizeof(uni->storage[0]) * components * count * size_mul);
    } else {
       const union gl_constant_value *src =
 	 (const union gl_constant_value *) values;
@@ -869,13 +902,14 @@ extern "C" void
 _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
 		     GLuint cols, GLuint rows,
                      GLint location, GLsizei count,
-                     GLboolean transpose, const GLfloat *values)
+                     GLboolean transpose,
+                     const GLvoid *values, GLenum type)
 {
    unsigned offset;
    unsigned vectors;
    unsigned components;
    unsigned elements;
-
+   int size_mul = mesa_type_is_double(type) ? 2 : 1;
    struct gl_uniform_storage *const uni =
       validate_uniform_parameters(ctx, shProg, location, count,
                                   &offset, "glUniformMatrix", false);
@@ -913,7 +947,7 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
    }
 
    if (ctx->_Shader->Flags & GLSL_UNIFORMS) {
-      log_uniform(values, GLSL_TYPE_FLOAT, components, vectors, count,
+      log_uniform(values, uni->type->base_type, components, vectors, count,
 		  bool(transpose), shProg, location, uni);
    }
 
@@ -940,11 +974,11 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
 
    if (!transpose) {
       memcpy(&uni->storage[elements * offset], values,
-	     sizeof(uni->storage[0]) * elements * count);
+	     sizeof(uni->storage[0]) * elements * count * size_mul);
    } else {
       /* Copy and transpose the matrix.
        */
-      const float *src = values;
+      const float *src = (const float *)values;
       float *dst = &uni->storage[elements * offset].f;
 
       for (int i = 0; i < count; i++) {
