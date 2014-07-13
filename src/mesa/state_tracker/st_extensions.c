@@ -251,6 +251,7 @@ void st_init_limits(struct pipe_screen *screen,
          options->MaxUnrollIterations = MIN2(screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_INSTRUCTIONS), 65536);
 
       options->LowerClipDistance = true;
+      options->LowerTessLevel = true;
    }
 
    c->MaxCombinedTextureImageUnits =
