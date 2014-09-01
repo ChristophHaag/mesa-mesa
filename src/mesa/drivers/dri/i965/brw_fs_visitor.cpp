@@ -843,6 +843,7 @@ fs_visitor::visit(ir_expression *ir)
       op[0].type = BRW_REGISTER_TYPE_D;
       this->result = op[0];
       break;
+   case ir_unop_d2f:
    case ir_unop_i2f:
    case ir_unop_u2f:
    case ir_unop_f2i:
@@ -1100,7 +1101,6 @@ fs_visitor::visit(ir_expression *ir)
       unreachable("already handled above");
       break;
 
-   case ir_unop_d2f:
    case ir_unop_f2d:
    case ir_unop_d2i:
    case ir_unop_i2d:

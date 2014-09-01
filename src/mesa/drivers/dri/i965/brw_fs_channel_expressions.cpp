@@ -220,6 +220,7 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_bitcast_f2i:
    case ir_unop_bitcast_f2u:
    case ir_unop_bitcast_u2f:
+   case ir_unop_d2f:
    case ir_unop_i2u:
    case ir_unop_u2i:
    case ir_unop_f2i:
@@ -455,7 +456,6 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
       unreachable("not reached: visitor splits this manually");
    case ir_unop_frexp_sig:
    case ir_unop_frexp_exp:
-   case ir_unop_d2f:
    case ir_unop_f2d:
    case ir_unop_d2i:
    case ir_unop_i2d:
