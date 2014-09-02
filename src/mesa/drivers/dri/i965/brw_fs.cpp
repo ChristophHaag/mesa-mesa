@@ -1087,9 +1087,12 @@ fs_reg::fs_reg(fs_visitor *v, const struct glsl_type *type)
    int reg_width = v->dispatch_width / 8;
 
    this->file = GRF;
-   this->reg = v->virtual_grf_alloc(v->type_size(type) * reg_width);
    this->reg_offset = 0;
    this->type = brw_type_for_base_type(type);
+
+   const int dmul = (this->type == BRW_REGISTER_TYPE_DF) ? 2 : 1;
+   this->reg = v->virtual_grf_alloc(v->type_size(type) * dmul * reg_width);
+
    this->width = v->dispatch_width;
    assert(this->width == 8 || this->width == 16);
 }
