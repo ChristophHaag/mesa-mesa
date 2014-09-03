@@ -1234,6 +1234,9 @@ brw_reg_from_fs_reg(fs_reg *reg)
       break;
    case IMM:
       switch (reg->type) {
+      case BRW_REGISTER_TYPE_DF:
+         brw_reg = brw_imm_df(reg->fixed_hw_reg.dw1.df);
+         break;
       case BRW_REGISTER_TYPE_F:
 	 brw_reg = brw_imm_f(reg->fixed_hw_reg.dw1.f);
 	 break;

@@ -2363,6 +2363,11 @@ fs_visitor::visit(ir_constant *ir)
 
       for (unsigned i = 0; i < size; i++) {
 	 switch (ir->type->base_type) {
+         case GLSL_TYPE_DOUBLE:
+            if (brw->gen >= 8) {
+               emit(MOV(dst_reg, fs_reg(ir->value.d[i])));
+            }
+            break;
 	 case GLSL_TYPE_FLOAT:
 	    emit(MOV(dst_reg, fs_reg(ir->value.f[i])));
 	    break;
