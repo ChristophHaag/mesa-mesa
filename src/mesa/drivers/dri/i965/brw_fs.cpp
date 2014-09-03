@@ -1148,7 +1148,6 @@ fs_visitor::setup_uniform_values(ir_variable *ir)
     * order we'd walk the type, so walk the list of storage and find anything
     * with our name, or the prefix of a component that starts with our name.
     */
-   unsigned params_before = uniforms;
    for (unsigned u = 0; u < shader_prog->NumUserUniformStorage; u++) {
       struct gl_uniform_storage *storage = &shader_prog->UniformStorage[u];
 
@@ -1163,14 +1162,17 @@ fs_visitor::setup_uniform_values(ir_variable *ir)
       if (storage->array_elements)
          slots *= storage->array_elements;
 
-      for (unsigned i = 0; i < slots; i++) {
-         stage_prog_data->param[uniforms++] = &storage->storage[i];
+      for (unsigned i = 0, slot = 0; i < slots; i++) {
+         /* Double precision constants take two consecutive slots. */
+         if (storage->type->base_type == GLSL_TYPE_DOUBLE) {
+            stage_prog_data->param[uniforms++] = &storage->storage[slot];
+            stage_prog_data->param[uniforms++] = &storage->storage[slot + 1];
+            slot += 2;
+         } else {
+            stage_prog_data->param[uniforms++] = &storage->storage[slot++];
+         }
       }
    }
-
-   /* Make sure we actually initialized the right amount of stuff here. */
-   assert(params_before + ir->type->component_slots() == uniforms);
-   (void)params_before;
 }
 
 
