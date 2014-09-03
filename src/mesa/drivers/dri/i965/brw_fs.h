@@ -569,6 +569,8 @@ public:
 
    void emit_interpolate_expression(ir_expression *ir);
 
+   void emit_pack32(ir_expression *ir);
+
    bool try_rewrite_rhs_to_dst(ir_assignment *ir,
 			       fs_reg dst,
 			       fs_reg src,

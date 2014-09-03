@@ -473,6 +473,22 @@ fs_visitor::emit_interpolate_expression(ir_expression *ir)
 }
 
 void
+fs_visitor::emit_pack32(ir_expression *ir)
+{
+   assert(ir->operands[0]->type == glsl_type::uvec2_type);
+
+   ir_rvalue *rval = ir->operands[0];
+   rval->accept(this);
+
+   fs_reg src(this->result);
+   fs_reg tmp(this, glsl_type::double_type);
+
+   emit(FS_OPCODE_PACK_DOUBLE_2x32, tmp, offset(src, 1), src);
+
+   this->result = tmp;
+}
+
+void
 fs_visitor::visit(ir_expression *ir)
 {
    unsigned int operand;
@@ -508,6 +524,10 @@ fs_visitor::visit(ir_expression *ir)
    case ir_binop_interpolate_at_offset:
    case ir_binop_interpolate_at_sample:
       emit_interpolate_expression(ir);
+      return;
+
+   case ir_unop_pack_double_2x32:
+      emit_pack32(ir);
       return;
 
    default:
