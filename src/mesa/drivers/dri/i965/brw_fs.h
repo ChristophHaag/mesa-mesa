@@ -781,6 +781,11 @@ private:
                                         struct brw_reg dst,
                                         struct brw_reg src);
 
+   void generate_pack_double_2x32(fs_inst *inst,
+                                  struct brw_reg dst,
+                                  struct brw_reg hi,
+                                  struct brw_reg lo);
+
    void generate_shader_time_add(fs_inst *inst,
                                  struct brw_reg payload,
                                  struct brw_reg offset,

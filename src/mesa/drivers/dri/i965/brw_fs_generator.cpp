@@ -1412,6 +1412,79 @@ fs_generator::generate_pack_half_2x16_split(fs_inst *inst,
    brw_F32TO16(p, dst_w, x);
 }
 
+/**
+ * In SIMD8 mode one moves components for four channels. In SIM16 one moves
+ * eight. The register width and vertical strides for the source registers
+ * need to be adjusted accordingly in order to fulfill the constraint:
+ *
+ *   vstride == width * hstride
+ */
+static struct brw_reg
+prepare_double_component_for_packing(int exec_size, struct brw_reg component)
+{
+   if (!brw_is_scalar(component)) {
+      assert(component.hstride == BRW_HORIZONTAL_STRIDE_1);
+      assert(component.vstride == BRW_VERTICAL_STRIDE_8);
+      if (exec_size == 8) {
+         component.width = BRW_WIDTH_4;
+         component.vstride = BRW_VERTICAL_STRIDE_4;
+      }
+   }
+
+   return component;
+}
+
+void
+fs_generator::generate_pack_double_2x32(fs_inst *inst,
+                                        struct brw_reg dst,
+                                        struct brw_reg hi,
+                                        struct brw_reg lo)
+{
+   assert(brw->gen >= 7);
+   assert(dst.type == BRW_REGISTER_TYPE_DF);
+   assert(hi.type == BRW_REGISTER_TYPE_UD);
+   assert(lo.type == BRW_REGISTER_TYPE_UD);
+
+   /**
+    * Double precision floats take 64-bits channel meaning that two registers
+    * are needed to hold 8 elements. The values are constructed in two steps:
+    * first low 32-bits are copied and then the high 32. The destination is
+    * treated as having unsigned type but a horizontal stride telling that two
+    * consecutive channels are 64-bits apart. Both high bits and low bits
+    * require two moves each - hardware allows sources to spand over mulitple
+    * physical registers but destination not. Hence four moves in total are
+    * required.
+    *
+    * TODO: If "hi" and "lo" are both uniforms and in consecutive slots then
+    *       on HSW and newer one could simply omit the copy. The pair of
+    *       32-bit slots could be treated as double precision scalar instead.
+    *       On IVB the copy is still needed but could be done with two
+    *       instructions each moving hi-lo-pairs.
+    */
+   dst.type = BRW_REGISTER_TYPE_UD;
+   dst.width = BRW_WIDTH_4;
+   dst.hstride = BRW_HORIZONTAL_STRIDE_2;
+   dst.vstride = BRW_VERTICAL_STRIDE_8;
+
+   /* In terms of SIMD8 the first half (four 64-bit channels) is filled as
+    * follows. First the low 32-bits are copied and then the high.
+    *
+    *            +--+--+--+--+--+--+--+--+          +--+--+--+--+--+--+--+--+
+    * dst.reg    |LO|  |L1|  |L2|  |L3|  |   hi.reg |H0|H1|H2|H3|H4|H5|H6|H7|
+    *            +--+--+--+--+--+--+--+--+          +--+--+--+--+--+--+--+--+
+    *                                        lo.reg |L0|L1|L2|L3|L4|L5|L6|L7|
+    *                                               +--+--+--+--+--+--+--+--+
+    */
+   brw_MOV(p, dst, prepare_double_component_for_packing(inst->exec_size, lo));
+
+   /*            +--+--+--+--+--+--+--+--+
+    * dst.reg    |L0|H0|L1|H1|L2|H2|L3|H3|
+    *            +--+--+--+--+--+--+--+--+
+    */
+   dst.subnr += 4;
+   brw_MOV(p, dst, prepare_double_component_for_packing(inst->exec_size, hi));
+}
+
 void
 fs_generator::generate_unpack_half_2x16_split(fs_inst *inst,
                                               struct brw_reg dst,
@@ -1930,6 +2003,10 @@ fs_generator::generate_code(const cfg_t *cfg)
 
       case FS_OPCODE_PACK_HALF_2x16_SPLIT:
           generate_pack_half_2x16_split(inst, dst, src[0], src[1]);
+          break;
+
+      case FS_OPCODE_PACK_DOUBLE_2x32:
+          generate_pack_double_2x32(inst, dst, src[0], src[1]);
           break;
 
       case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X:

@@ -483,6 +483,8 @@ brw_instruction_name(enum opcode op)
       return "unpack_half_2x16_split_x";
    case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y:
       return "unpack_half_2x16_split_y";
+   case FS_OPCODE_PACK_DOUBLE_2x32:
+      return "pack_double_2X32";
 
    case FS_OPCODE_PLACEHOLDER_HALT:
       return "placeholder_halt";
