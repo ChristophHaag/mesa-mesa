@@ -2129,8 +2129,13 @@ fs_visitor::assign_constant_locations()
             continue;
 
          int constant_nr = inst->src[i].reg + inst->src[i].reg_offset;
-         if (constant_nr >= 0 && constant_nr < (int) uniforms)
+         if (constant_nr >= 0 && constant_nr < (int) uniforms) {
             is_live[constant_nr] = true;
+
+            /* Double precision constants consume two consecutive slots. */
+            if (inst->src[i].type == BRW_REGISTER_TYPE_DF)
+               is_live[constant_nr + 1] = true;
+         }
       }
    }
 
