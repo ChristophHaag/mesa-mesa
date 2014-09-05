@@ -854,6 +854,8 @@ glsl_type::can_implicitly_convert_to(const glsl_type *desired,
 unsigned
 glsl_type::std140_base_alignment(bool row_major) const
 {
+   unsigned N = is_double() ? 8 : 4;
+
    /* (1) If the member is a scalar consuming <N> basic machine units, the
     *     base alignment is <N>.
     *
@@ -867,12 +869,12 @@ glsl_type::std140_base_alignment(bool row_major) const
    if (this->is_scalar() || this->is_vector()) {
       switch (this->vector_elements) {
       case 1:
-	 return 4;
+	 return N;
       case 2:
-	 return 8;
+	 return 2 * N;
       case 3:
       case 4:
-	 return 16;
+	 return 4 * N;
       }
    }
 
@@ -921,10 +923,10 @@ glsl_type::std140_base_alignment(bool row_major) const
       int r = this->vector_elements;
 
       if (row_major) {
-	 vec_type = get_instance(GLSL_TYPE_FLOAT, c, 1);
+	 vec_type = get_instance(base_type, c, 1);
 	 array_type = glsl_type::get_array_instance(vec_type, r);
       } else {
-	 vec_type = get_instance(GLSL_TYPE_FLOAT, r, 1);
+	 vec_type = get_instance(base_type, r, 1);
 	 array_type = glsl_type::get_array_instance(vec_type, c);
       }
 
@@ -969,6 +971,8 @@ glsl_type::std140_base_alignment(bool row_major) const
 unsigned
 glsl_type::std140_size(bool row_major) const
 {
+   unsigned N = is_double() ? 8 : 4;
+
    /* (1) If the member is a scalar consuming <N> basic machine units, the
     *     base alignment is <N>.
     *
@@ -980,7 +984,7 @@ glsl_type::std140_size(bool row_major) const
     *     <N> basic machine units, the base alignment is 4<N>.
     */
    if (this->is_scalar() || this->is_vector()) {
-      return this->vector_elements * 4;
+      return this->vector_elements * N;
    }
 
    /* (5) If the member is a column-major matrix with <C> columns and
@@ -1015,11 +1019,12 @@ glsl_type::std140_size(bool row_major) const
       }
 
       if (row_major) {
-	 vec_type = get_instance(GLSL_TYPE_FLOAT,
-				 element_type->matrix_columns, 1);
+         vec_type = get_instance(base_type,
+                                 element_type->matrix_columns, 1);
+
 	 array_len *= element_type->vector_elements;
       } else {
-	 vec_type = get_instance(GLSL_TYPE_FLOAT,
+	 vec_type = get_instance(base_type,
 				 element_type->vector_elements, 1);
 	 array_len *= element_type->matrix_columns;
       }
