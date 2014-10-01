@@ -162,7 +162,15 @@ fs_visitor::visit(ir_dereference_variable *ir)
       this->result = fs_reg(reg_null_d);
       return;
    }
-   this->result = *reg;
+
+   if (is_df_uniform_and_needs_separate_load(*reg) &&
+       ir->var->type == glsl_type::double_type) {
+      fs_reg res = fs_reg(this, glsl_type::double_type);
+      emit(FS_OPCODE_UNIFORM_DOUBLE_LOAD, res, *reg);
+      this->result = res;
+   } else {
+      this->result = *reg;
+   }
 }
 
 void
@@ -182,6 +190,13 @@ fs_visitor::visit(ir_dereference_record *ir)
    }
    this->result = offset(this->result, off);
    this->result.type = brw_type_for_base_type(ir->type);
+
+   if (is_df_uniform_and_needs_separate_load(this->result) &&
+       ir->type == glsl_type::double_type) {
+      fs_reg res = fs_reg(this, glsl_type::double_type);
+      emit(FS_OPCODE_UNIFORM_DOUBLE_LOAD, res, this->result);
+      this->result = res;
+   }
 }
 
 void
@@ -223,7 +238,15 @@ fs_visitor::visit(ir_dereference_array *ir)
       src.reladdr = ralloc(mem_ctx, fs_reg);
       memcpy(src.reladdr, &index_reg, sizeof(index_reg));
    }
-   this->result = src;
+
+   if (is_df_uniform_and_needs_separate_load(src) &&
+       ir->type == glsl_type::double_type) {
+      fs_reg res(this, glsl_type::double_type);
+      emit(FS_OPCODE_UNIFORM_DOUBLE_LOAD, res, src);
+      this->result = res;
+   } else {
+      this->result = src;
+   }
 }
 
 void
@@ -1199,7 +1222,10 @@ fs_visitor::visit(ir_assignment *ir)
        ir->lhs->type->is_vector()) {
       for (int i = 0; i < ir->lhs->type->vector_elements; i++) {
 	 if (ir->write_mask & (1 << i)) {
-	    inst = emit(MOV(l, r));
+            if (is_df_uniform_and_needs_separate_load(r))
+               inst = emit(FS_OPCODE_UNIFORM_DOUBLE_LOAD, l, r);
+            else
+	       inst = emit(MOV(l, r));
 	    if (ir->condition)
 	       inst->predicate = BRW_PREDICATE_NORMAL;
 	    r = offset(r, 1);
@@ -2256,6 +2282,12 @@ fs_visitor::visit(ir_swizzle *ir)
 
    if (ir->type->vector_elements == 1) {
       this->result = offset(this->result, ir->mask.x);
+      if (is_df_uniform_and_needs_separate_load(this->result)) {
+         fs_reg src = this->result;
+         fs_reg res = fs_reg(this, ir->type);
+         emit(FS_OPCODE_UNIFORM_DOUBLE_LOAD, res, src);
+         this->result = res;
+      }
       return;
    }
 
@@ -2281,7 +2313,10 @@ fs_visitor::visit(ir_swizzle *ir)
 	 break;
       }
 
-      emit(MOV(result, offset(channel, swiz)));
+      if (is_df_uniform_and_needs_separate_load(channel))
+         emit(FS_OPCODE_UNIFORM_DOUBLE_LOAD, result, offset(channel, swiz));
+      else
+         emit(MOV(result, offset(channel, swiz)));
       result = offset(result, 1);
    }
 }
