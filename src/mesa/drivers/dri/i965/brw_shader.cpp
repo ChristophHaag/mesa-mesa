@@ -919,3 +919,39 @@ backend_visitor::assign_common_binding_table_offsets(uint32_t next_binding_table
 
    /* prog_data->base.binding_table.size will be set by brw_mark_surface_used. */
 }
+
+/**
+ * Check if double precision scalar needs to be loaded into vector - IVB
+ * can operate only with scalars of single precision.
+ *
+ * Quotes from the docs:
+ *
+ * IVB PRM vol4 part 3, section 3.1 (about align1 mode):
+ * "A single precision float scalar is allowed."
+ *
+ * Section 3.3.9 (Register region restrictions):
+ * "If ExecSize = Width = 1, both VertStride and HorzStride must be 0. This
+ *  defines a scalar."
+ * "If VertStride = HorzStride = 0, Width must be 1 regardless of the value
+ *  of ExecSize."
+ *
+ * "In Align1 mode, all regioning parameters like stride, execution size, and
+ *  width must use the syntax of a pair of packed floats. The offsets for
+ *  these data types must be 64 - bit aligned. The execution size and
+ *  regioning parameters are in terms of floats.
+ *
+ *    Example: mov (8) r10.0<1>:df r11.0<8;8,1>:df
+ *    The above instruction moves four double floats"
+ *
+ * Hence in case of "double scalar", one should set width = 2 violating the
+ * second constraint.
+ */
+bool
+backend_visitor::is_df_uniform_and_needs_separate_load(
+   const struct backend_reg& reg) const
+{
+   if (brw->gen >= 8 || brw->is_haswell)
+      return false;
+
+   return reg.file == UNIFORM && reg.type == BRW_REGISTER_TYPE_DF;
+}
