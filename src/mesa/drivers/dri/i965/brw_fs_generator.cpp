@@ -1489,6 +1489,34 @@ fs_generator::generate_pack_double_2x32(fs_inst *inst,
 }
 
 void
+fs_generator::generate_uniform_double_float_load(const fs_inst *inst,
+                                                 struct brw_reg dst,
+                                                 struct brw_reg src)
+{
+   assert(p->brw->gen == 7);
+
+   dst.type = BRW_REGISTER_TYPE_UD;
+   dst.width = BRW_WIDTH_8;
+   dst.hstride = BRW_HORIZONTAL_STRIDE_1;
+   dst.vstride = BRW_VERTICAL_STRIDE_8;
+
+   /* Treat the source as packed pair of 32-bit elements. */
+   src.type = BRW_REGISTER_TYPE_UD;
+   src.width = BRW_WIDTH_2;
+   src.hstride = BRW_HORIZONTAL_STRIDE_1;
+   src.vstride = BRW_VERTICAL_STRIDE_0;
+
+   /* Issue two instructions, one move copies only execution width many single
+    * precision elements. In other words, one instruction writes only
+    * (execution width / 2) many double precision channels - therefore two
+    * are needed to write all the channels.
+    */
+   brw_copy_double_float_scalar(p, dst, src);
+   dst.nr += (inst->exec_size / 8);
+   brw_copy_double_float_scalar(p, dst, src);
+}
+
+void
 fs_generator::generate_unpack_half_2x16_split(fs_inst *inst,
                                               struct brw_reg dst,
                                               struct brw_reg src)
@@ -1961,6 +1989,10 @@ fs_generator::generate_code(const cfg_t *cfg)
 
       case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7:
 	 generate_varying_pull_constant_load_gen7(inst, dst, src[0], src[1]);
+	 break;
+
+      case FS_OPCODE_UNIFORM_DOUBLE_LOAD:
+	 generate_uniform_double_float_load(inst, dst, src[0]);
 	 break;
 
       case FS_OPCODE_REP_FB_WRITE:

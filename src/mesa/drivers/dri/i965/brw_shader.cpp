@@ -469,6 +469,9 @@ brw_instruction_name(enum opcode op)
    case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7:
       return "varying_pull_const_gen7";
 
+   case FS_OPCODE_UNIFORM_DOUBLE_LOAD:
+      return "uniform_double_load";
+
    case FS_OPCODE_MOV_DISPATCH_TO_FLAGS:
       return "mov_dispatch_to_flags";
    case FS_OPCODE_DISCARD_JUMP:
