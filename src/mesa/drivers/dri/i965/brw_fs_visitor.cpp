@@ -174,9 +174,11 @@ fs_visitor::visit(ir_dereference_record *ir)
 
    unsigned int off = 0;
    for (unsigned int i = 0; i < struct_type->length; i++) {
+      const unsigned dmul =
+         struct_type->fields.structure[i].type->is_double() ? 2 : 1;
       if (strcmp(struct_type->fields.structure[i].name, ir->field) == 0)
 	 break;
-      off += type_size(struct_type->fields.structure[i].type);
+      off += (dmul * type_size(struct_type->fields.structure[i].type));
    }
    this->result = offset(this->result, off);
    this->result.type = brw_type_for_base_type(ir->type);
@@ -210,7 +212,9 @@ fs_visitor::visit(ir_dereference_array *ir)
 
       fs_reg index_reg;
       index_reg = fs_reg(this, glsl_type::int_type);
-      emit(BRW_OPCODE_MUL, index_reg, this->result, fs_reg(element_size));
+      const int dmul = (src.type == BRW_REGISTER_TYPE_DF) ? 2 : 1;
+      emit(BRW_OPCODE_MUL, index_reg, this->result,
+           fs_reg(dmul * element_size));
 
       if (src.reladdr) {
          emit(BRW_OPCODE_ADD, index_reg, *src.reladdr, index_reg);

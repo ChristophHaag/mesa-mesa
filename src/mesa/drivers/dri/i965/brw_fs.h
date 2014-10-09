@@ -167,6 +167,8 @@ horiz_offset(fs_reg reg, unsigned delta)
 static inline fs_reg
 offset(fs_reg reg, unsigned delta)
 {
+   const unsigned dmul = (reg.type == BRW_REGISTER_TYPE_DF) ? 2 : 1;
+
    assert(reg.stride > 0);
    switch (reg.file) {
    case BAD_FILE:
@@ -175,7 +177,7 @@ offset(fs_reg reg, unsigned delta)
    case MRF:
       return byte_offset(reg, delta * reg.width * reg.stride * type_sz(reg.type));
    case UNIFORM:
-      reg.reg_offset += delta;
+      reg.reg_offset += (dmul * delta);
       break;
    default:
       assert(delta == 0);
