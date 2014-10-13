@@ -1488,6 +1488,79 @@ fs_generator::generate_pack_double_2x32(fs_inst *inst,
    brw_MOV(p, dst, prepare_double_component_for_packing(inst->exec_size, hi));
 }
 
+/**
+ * Similarly to the packing case, in SIMD8 mode one moves components for four
+ * channels and in SIM16 eight. The register width and vertical strides for
+ * the source registers need to be adjusted accordingly in order to fulfill
+ * the constraint:
+ *
+ *   vstride == width * hstride
+ */
+static struct brw_reg
+prepare_double_src_for_unpacking(int exec_size, struct brw_reg src)
+{
+   if (!brw_is_scalar(src)) {
+      assert(src.hstride == BRW_HORIZONTAL_STRIDE_1);
+      assert(src.vstride == BRW_VERTICAL_STRIDE_8);
+      if (exec_size == 8)
+         src.width = BRW_WIDTH_4;
+      else
+         src.vstride = BRW_VERTICAL_STRIDE_16;
+      src.hstride = BRW_HORIZONTAL_STRIDE_2;
+   }
+
+   return src;
+}
+
+/**
+ * Split either high (unpack_hi) or low 32-bits of given double precision
+ * float element(s) into given vector of 32-bit elements.
+ *
+ * High 32-bits in terms of SIMD8 with vector source:
+ *
+ *          +--+--+--+--+--+--+--+--+             +--+--+--+--+--+--+--+--+
+ * dst.reg  |H0|H1|H2|H3|H4|H5|H6|H7|   src0.reg  |L0|H0|L1|H1|L2|H2|L3|H3|
+ *          +--+--+--+--+--+--+--+--+             +--+--+--+--+--+--+--+--+
+ *                                      src1.reg  |L4|H4|L5|H5|L6|H6|L7|H7|
+ *                                                +--+--+--+--+--+--+--+--+
+ *
+ * TODO: If src0 and src1 are close enough with each other, use one
+ *       instruction with corresponding vertical stride instead.
+ *
+ * High 32-bits in terms of SIMD8 with scalar source:
+ *
+ *          +--+--+--+--+--+--+--+--+             +--+--+--+--+--+--+--+--+
+ * dst.reg  |H0|H0|H0|H0|H0|H0|H0|H0|   src.reg   |L0|H0|  |  |  |  |  |  |
+ *          +--+--+--+--+--+--+--+--+             +--+--+--+--+--+--+--+--+
+ */
+void
+fs_generator::generate_unpack_double_2x32_half(fs_inst *inst,
+                                               struct brw_reg dst,
+                                               struct brw_reg src0,
+                                               struct brw_reg src1,
+                                               bool unpack_hi)
+{
+   assert(brw->gen >= 7);
+   assert(dst.type == BRW_REGISTER_TYPE_UD);
+   assert(src0.type == BRW_REGISTER_TYPE_UD);
+   assert(src1.type == BRW_REGISTER_TYPE_UD);
+
+   dst.width = BRW_WIDTH_4;
+
+   if (unpack_hi) {
+      src0.subnr += 4;
+      src1.subnr += 4;
+   }
+
+   brw_MOV(p, dst, prepare_double_src_for_unpacking(inst->exec_size, src0));
+
+   if (inst->exec_size == 16)
+      ++dst.nr;
+   else
+      dst.subnr += (4 * 4);
+   brw_MOV(p, dst, prepare_double_src_for_unpacking(inst->exec_size, src1));
+}
+
 void
 fs_generator::generate_uniform_double_float_load(const fs_inst *inst,
                                                  struct brw_reg dst,
@@ -2042,6 +2115,14 @@ fs_generator::generate_code(const cfg_t *cfg)
 
       case FS_OPCODE_PACK_DOUBLE_2x32:
           generate_pack_double_2x32(inst, dst, src[0], src[1]);
+          break;
+
+      case FS_OPCODE_UNPACK_DOUBLE_2x32_X:
+          generate_unpack_double_2x32_half(inst, dst, src[0], src[1], true);
+          break;
+
+      case FS_OPCODE_UNPACK_DOUBLE_2x32_Y:
+          generate_unpack_double_2x32_half(inst, dst, src[0], src[1], false);
           break;
 
       case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X:

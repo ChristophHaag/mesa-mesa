@@ -792,6 +792,12 @@ private:
                                   struct brw_reg hi,
                                   struct brw_reg lo);
 
+   void generate_unpack_double_2x32_half(fs_inst *inst,
+                                         struct brw_reg dst,
+                                         struct brw_reg src0,
+                                         struct brw_reg src1,
+                                         bool is_2nd_half);
+
    void generate_shader_time_add(fs_inst *inst,
                                  struct brw_reg payload,
                                  struct brw_reg offset,
