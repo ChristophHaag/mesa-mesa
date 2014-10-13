@@ -171,6 +171,7 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
       case ir_binop_interpolate_at_offset:
       case ir_binop_interpolate_at_sample:
       case ir_unop_pack_double_2x32:
+      case ir_unop_unpack_double_2x32:
          return visit_continue;
 
       default:
@@ -451,6 +452,7 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_pack_double_2x32:
       unreachable("not reached: expression merges the input vector");
    case ir_unop_unpack_double_2x32:
+      unreachable("not reached: visitor splits this manually");
    case ir_unop_frexp_sig:
    case ir_unop_frexp_exp:
    case ir_unop_d2f:

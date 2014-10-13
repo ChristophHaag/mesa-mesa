@@ -950,6 +950,17 @@ fs_visitor::visit(ir_expression *ir)
       inst = emit(MOV(this->result, op[0]));
       inst->saturate = true;
       break;
+   case ir_unop_unpack_double_2x32:
+      assert(ir->operands[0]->type == glsl_type::double_type);
+      assert(ir->type == glsl_type::uvec2_type);
+
+      op[0].type = BRW_REGISTER_TYPE_UD;
+
+      emit(FS_OPCODE_UNPACK_DOUBLE_2x32_X,
+           offset(this->result, 1), op[0], offset(op[0], 1));
+      emit(FS_OPCODE_UNPACK_DOUBLE_2x32_Y,
+           this->result, op[0], offset(op[0], 1));
+      break;
    case ir_triop_bitfield_extract:
       /* Note that the instruction's argument order is reversed from GLSL
        * and the IR.
@@ -1096,7 +1107,6 @@ fs_visitor::visit(ir_expression *ir)
    case ir_unop_d2u:
    case ir_unop_u2d:
    case ir_unop_pack_double_2x32:
-   case ir_unop_unpack_double_2x32:
    case ir_unop_frexp_sig:
    case ir_unop_frexp_exp:
       unreachable("fp64 todo");
