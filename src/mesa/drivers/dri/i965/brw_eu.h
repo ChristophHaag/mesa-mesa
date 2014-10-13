@@ -325,6 +325,10 @@ void brw_shader_time_add(struct brw_compile *p,
                          struct brw_reg payload,
                          uint32_t surf_index);
 
+void brw_copy_double_float_scalar(struct brw_compile *p,
+                                  struct brw_reg dst,
+                                  struct brw_reg src);
+
 /**
  * Return the generation-specific jump distance scaling factor.
  *

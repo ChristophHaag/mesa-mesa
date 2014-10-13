@@ -2868,3 +2868,27 @@ void brw_shader_time_add(struct brw_compile *p,
                                      0 /* response length */,
                                      false /* header present */);
 }
+
+void brw_copy_double_float_scalar(struct brw_compile *p,
+                                  struct brw_reg dst,
+                                  struct brw_reg src)
+{
+   const struct brw_context *brw = p->brw;
+   brw_inst *insn = brw_alu1(p, BRW_OPCODE_MOV, dst, src);
+
+   assert(brw->gen == 7);
+
+   /* Double precision float scalar isn't supported by IVB. Is has to be
+    * loaded into a vector manually. In SIMD8 mode it is possible to treat the
+    * double precision float as a pair of single precision floats using
+    * register region rx <0;2,1>.
+    * In SIMD16 this won't work as the latter half would use rx+1 as source.
+    * Hence emit two SIMD8 instructions manually both using rx as the source.
+    */
+   if (p->compressed) {
+      brw_inst_set_exec_size(brw, insn, BRW_EXECUTE_8);
+      ++dst.nr;
+      insn = brw_alu1(p, BRW_OPCODE_MOV, dst, src);
+      brw_inst_set_exec_size(brw, insn, BRW_EXECUTE_8);
+   }
+}
