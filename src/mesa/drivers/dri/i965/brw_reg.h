@@ -802,6 +802,14 @@ brw_abs(struct brw_reg reg)
    return reg;
 }
 
+static inline bool
+brw_is_scalar(struct brw_reg reg)
+{
+   return reg.width == BRW_WIDTH_1 &&
+          reg.hstride == BRW_HORIZONTAL_STRIDE_0 &&
+          reg.vstride == BRW_VERTICAL_STRIDE_0;
+}
+
 /************************************************************************/
 
 static inline struct brw_reg
