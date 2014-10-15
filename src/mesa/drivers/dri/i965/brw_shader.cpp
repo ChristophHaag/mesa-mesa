@@ -144,7 +144,8 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 			 EXP_TO_EXP2 |
 			 LOG_TO_LOG2 |
                          bitfield_insert |
-                         LDEXP_TO_ARITH);
+                         LDEXP_TO_ARITH |
+                         DFREXP_DLDEXP_TO_ARITH);
 
       /* Pre-gen6 HW can only nest if-statements 16 deep.  Beyond this,
        * if-statements need to be flattened.
