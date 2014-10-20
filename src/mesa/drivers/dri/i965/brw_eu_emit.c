@@ -879,8 +879,9 @@ brw_alu3(struct brw_compile *p, unsigned opcode, struct brw_reg dest,
 	  dest.file == BRW_MESSAGE_REGISTER_FILE);
    assert(dest.nr < 128);
    assert(dest.address_mode == BRW_ADDRESS_DIRECT);
-   assert(dest.type == BRW_REGISTER_TYPE_F ||
-          dest.type == BRW_REGISTER_TYPE_D ||
+   assert(dest.type == BRW_REGISTER_TYPE_F  ||
+          dest.type == BRW_REGISTER_TYPE_DF ||
+          dest.type == BRW_REGISTER_TYPE_D  ||
           dest.type == BRW_REGISTER_TYPE_UD);
    if (brw->gen == 6) {
       brw_inst_set_3src_dst_reg_file(brw, inst,
@@ -988,10 +989,17 @@ brw_inst *brw_##OP(struct brw_compile *p,         \
                                  struct brw_reg src1,           \
                                  struct brw_reg src2)           \
 {                                                               \
-   assert(dest.type == BRW_REGISTER_TYPE_F);                    \
-   assert(src0.type == BRW_REGISTER_TYPE_F);                    \
-   assert(src1.type == BRW_REGISTER_TYPE_F);                    \
-   assert(src2.type == BRW_REGISTER_TYPE_F);                    \
+   assert(dest.type == BRW_REGISTER_TYPE_F ||                   \
+          dest.type == BRW_REGISTER_TYPE_DF);                   \
+   if (dest.type == BRW_REGISTER_TYPE_F) {                      \
+      assert(src0.type == BRW_REGISTER_TYPE_F);                 \
+      assert(src1.type == BRW_REGISTER_TYPE_F);                 \
+      assert(src2.type == BRW_REGISTER_TYPE_F);                 \
+   } else if (dest.type == BRW_REGISTER_TYPE_DF) {              \
+      assert(src0.type == BRW_REGISTER_TYPE_DF);                \
+      assert(src1.type == BRW_REGISTER_TYPE_DF);                \
+      assert(src2.type == BRW_REGISTER_TYPE_DF);                \
+   }                                                            \
    return brw_alu3(p, BRW_OPCODE_##OP, dest, src0, src1, src2); \
 }
 
