@@ -367,6 +367,8 @@ vec4_visitor::emit_math(opcode opcode, dst_reg dst, src_reg src)
    case SHADER_OPCODE_LOG2:
    case SHADER_OPCODE_SIN:
    case SHADER_OPCODE_COS:
+      assert(dst.type != BRW_REGISTER_TYPE_DF);
+      assert(src.type != BRW_REGISTER_TYPE_DF);
       break;
    default:
       unreachable("not reached: bad math opcode");
@@ -420,6 +422,9 @@ vec4_visitor::emit_math(enum opcode opcode,
    case SHADER_OPCODE_POW:
    case SHADER_OPCODE_INT_QUOTIENT:
    case SHADER_OPCODE_INT_REMAINDER:
+      assert(dst.type != BRW_REGISTER_TYPE_DF);
+      assert(src0.type != BRW_REGISTER_TYPE_DF);
+      assert(src1.type != BRW_REGISTER_TYPE_DF);
       break;
    default:
       unreachable("not reached: unsupported binary math opcode");
