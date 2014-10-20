@@ -570,6 +570,7 @@ type_size(const struct glsl_type *type)
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_BOOL:
+   case GLSL_TYPE_DOUBLE:
       if (type->is_matrix()) {
 	 return type->matrix_columns;
       } else {
@@ -598,7 +599,6 @@ type_size(const struct glsl_type *type)
       return 0;
    case GLSL_TYPE_IMAGE:
    case GLSL_TYPE_VOID:
-   case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_ERROR:
    case GLSL_TYPE_INTERFACE:
       unreachable("not reached");
