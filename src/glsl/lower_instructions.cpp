@@ -44,6 +44,7 @@
  * - BORROW_TO_ARITH
  * - SAT_TO_CLAMP
  * - DOPS_TO_DFRAC
+ * - DSQRT_TO_FSQRT
  *
  * SUB_TO_ADD_NEG:
  * ---------------
@@ -119,6 +120,11 @@
  * DOPS_TO_DFRAC:
  * --------------
  * Converts double trunc, ceil, floor, round to fract
+ *
+ * DSQRT_TO_FSQRT
+ * --------------
+ * Splits double square root into exponent division and single precision
+ * square root.
  */
 
 #include "main/core.h" /* for M_LOG2E */
@@ -156,6 +162,7 @@ private:
    void dldexp_to_arith(ir_expression *);
    void dfrexp_sig_to_arith(ir_expression *);
    void dfrexp_exp_to_arith(ir_expression *);
+   void dsqrt_to_fsqrt(ir_expression *);
    void carry_to_arith(ir_expression *);
    void borrow_to_arith(ir_expression *);
    void sat_to_clamp(ir_expression *);
@@ -166,6 +173,14 @@ private:
    void dround_even_to_dfrac(ir_expression *);
    void dtrunc_to_dfrac(ir_expression *);
    void dsign_to_csel(ir_expression *);
+
+   ir_variable *div_dfloat_exp_by_two(ir_expression *ir,
+                                      ir_rvalue *high_32);
+   ir_variable * dfloat_exp_to_float_exp(ir_expression *ir,
+                                         ir_rvalue *high_32);
+   ir_variable *dfloat_frac_to_float_frac(ir_expression *ir,
+                                         ir_rvalue *high_32,
+                                         ir_rvalue *low_32);
 };
 
 } /* anonymous namespace */
@@ -731,6 +746,198 @@ lower_instructions_visitor::dfrexp_exp_to_arith(ir_expression *ir)
    this->progress = true;
 }
 
+/**
+ * Extract even part of the given double precision float exponent and
+ * divide it by two:
+ *   exponent = (((high_32_bits >> 20) & 0x7ff) + 1023) >> 1
+ */
+ir_variable *
+lower_instructions_visitor::div_dfloat_exp_by_two(ir_expression *ir,
+                                                  ir_rvalue *high_32)
+{
+   ir_constant *exp_mask = new(ir) ir_constant(0x7ffu);
+   ir_constant *exp_shift = new(ir) ir_constant(20u);
+   ir_constant *exp_bias = new(ir) ir_constant(1023u);
+   ir_constant *exp_shift_by_1 = new(ir) ir_constant(1u);
+
+   ir_variable *exp = new(ir) ir_variable(
+      glsl_type::uint_type, "exponent", ir_var_temporary);
+
+   base_ir->insert_before(exp);
+   base_ir->insert_before(
+      assign(
+         exp,
+         rshift(add(bit_and(rshift(high_32, exp_shift), exp_mask), exp_bias),
+                exp_shift_by_1)));
+
+   return exp;
+}
+
+/**
+ * Set the biased exponent for the single precision. This will be modulo-2
+ * of the incoming exponent including the sign.
+ * 
+ * In single precision biased exponents are:
+ *   -1  126  0x3F000000
+ *    0  127  0x3F800000
+ *    1  128  0x40000000
+ *
+ * mod_2 = (high_32_bits & 0x100000) << 3
+ *
+ * exp = (mod_2 | 0x3F000000) + ((hi & 0x40000000) >> 6)
+ */
+ir_variable *
+lower_instructions_visitor::dfloat_exp_to_float_exp(ir_expression *ir,
+                                                    ir_rvalue *high_32)
+{
+   ir_constant *exp_mask = new(ir) ir_constant(0x100000u);
+   ir_constant *exp_shift = new(ir) ir_constant(3u);
+   ir_constant *exp_minus_one = new(ir) ir_constant(0x3F000000u);
+   ir_constant *exp_sign_mask = new(ir) ir_constant(0x40000000u);
+   ir_constant *exp_sign_shift = new(ir) ir_constant(6u);
+   ir_variable *exp = new(ir) ir_variable(
+      glsl_type::uint_type, "single_precision_exp", ir_var_temporary);
+
+   base_ir->insert_before(exp);
+   base_ir->insert_before(
+      assign(
+         exp,
+         add(bit_or(lshift(bit_and(high_32->clone(ir, NULL), exp_mask),
+                           exp_shift),
+                    exp_minus_one),
+             rshift(bit_and(high_32->clone(ir, NULL), exp_sign_mask),
+                    exp_sign_shift))));
+
+   return exp;
+}
+
+/**
+ * Construct a single precision float containing the fraction part and
+ * uneven part of the exponent of a double precision float.
+ *
+ * fraction = high_32_bits & 0xfffff
+ * fraction = (fraction << 3) | (low_32_bits >> 29) | f_exp
+ */
+ir_variable *
+lower_instructions_visitor::dfloat_frac_to_float_frac(ir_expression *ir,
+                                                      ir_rvalue *high_32,
+                                                      ir_rvalue *low_32)
+{
+   ir_constant *frac_mask = new(ir) ir_constant(0xfffffu);
+   ir_constant *frac_hi_shift = new(ir) ir_constant(3u);
+   ir_constant *frac_lo_shift = new(ir) ir_constant(29u);
+   ir_variable *f_exp = dfloat_exp_to_float_exp(ir, high_32);
+   ir_variable *frac = new(ir) ir_variable(
+      glsl_type::uint_type, "fraction", ir_var_temporary);
+
+   base_ir->insert_before(frac);
+   base_ir->insert_before(
+      assign(
+         frac,
+         bit_or(bit_or(lshift(bit_and(high_32->clone(ir, NULL), frac_mask),
+                              frac_hi_shift),
+                       rshift(low_32, frac_lo_shift)),
+                f_exp)));
+
+   return frac;
+}
+
+/**
+ * Representation of a double precision floating point number in 64-bits:
+ *
+ *   6 6      5 5 
+ *   3 2      2 1                   0
+ *  +-+--------+---------------------+
+ *  |S|   E    |         M           |
+ *  +-+--------+---------------------+
+ *
+ * giving value = -1^S * (1.0 + 0.M) * 2^(E - bias) where bias is 1023.
+ *
+ * The 11 exponent bits are further divided into the most significant bit
+ * representing sign and lower 10 representing magnitude.
+ *
+ * Now let frac = 1.0 + 0.M, exp_s = -1^(S_E - 1) where S_E is the sign of the
+ * exponent and exp = abs(E - bias).
+ *
+ *    frac * 2^(exp_s * exp)
+ *  = frac * 2^(exp_s * (2 * floor(exp / 2))) * 2^(exp_s * (exp % 2))
+ *  = frac * 2^(exp_s * (exp % 2)) * 2^(2 * (exp_s * floor(exp / 2)))
+ *
+ * Now for the root square the even part of the exponent can be simply
+ * divided by two giving:
+ *
+ *    sqrt(frac * 2^(exp_s * exp))
+ *  = sqrt(frac * 2^(exp_s * (exp % 2))) * 2^(exp_s * floor(exp / 2))
+ *
+ * In turn "frac * 2^(exp_s * (exp % 2))" is now within the range of single
+ * precision floating point number. Hence it can be represented with 32-bits
+ * with precision reduced from 52 bits to 23.
+ */
+void
+lower_instructions_visitor::dsqrt_to_fsqrt(ir_expression *ir)
+{
+   assert(ir->operands[0]->type->is_double());
+
+   const unsigned vec_elem = ir->type->vector_elements;
+
+   ir_rvalue *results[4] = {NULL};
+
+   for (unsigned elem = 0; elem < vec_elem; elem++) {
+      ir_variable *unpacked = new(ir) ir_variable(glsl_type::uvec2_type,
+                                                  "unpacked",
+                                                  ir_var_temporary);
+ 
+      base_ir->insert_before(unpacked);
+      base_ir->insert_before(
+         assign(unpacked,
+                expr(ir_unop_unpack_double_2x32,
+                     swizzle(ir->operands[0]->clone(ir, NULL), elem, 1))));
+      ir_rvalue *lo = swizzle_x(unpacked);
+      ir_rvalue *hi = swizzle_y(unpacked);
+
+      ir_variable *exp = div_dfloat_exp_by_two(ir, hi);
+      ir_variable *frac = dfloat_frac_to_float_frac(ir, hi, lo);
+      ir_constant *frac_f_mask = new(ir) ir_constant(0x7fffffu);
+      ir_variable *frac_sqrt = new(ir) ir_variable(
+         glsl_type::uint_type, "sqrt_of_fraction", ir_var_temporary);
+
+      /* Extract the fraction part: fraction &= 0x7FFFFF */
+      base_ir->insert_before(frac_sqrt);
+      base_ir->insert_before(
+         assign(frac_sqrt,
+                bit_and(bitcast_f2u(sqrt(bitcast_u2f(frac))), frac_f_mask)));
+
+      ir_constant *exp_shift = new(ir) ir_constant(20u);
+      ir_constant *frac_hi_shift = new(ir) ir_constant(3u);
+      ir_constant *frac_lo_mask = new(ir) ir_constant(3u);
+      ir_constant *frac_lo_shift = new(ir) ir_constant(29u);
+
+      /* unpacked[1] = (exponent << 20) | (fraction >> 3) */
+      base_ir->insert_before(
+         assign(unpacked,
+                bit_or(lshift(exp, exp_shift),
+                       rshift(frac_sqrt, frac_hi_shift)),
+                WRITEMASK_Y));
+
+      /* unpacked[0] = (fraction & 0x3) << 29 */
+      base_ir->insert_before(
+         assign(unpacked,
+                lshift(bit_and(frac_sqrt, frac_lo_mask), frac_lo_shift),
+                WRITEMASK_X));
+
+      results[elem] = expr(ir_unop_pack_double_2x32, unpacked);
+   }
+ 
+   /* Put the dvec back together */
+   ir->operation = ir_quadop_vector;
+   ir->operands[0] = results[0];
+   ir->operands[1] = results[1];
+   ir->operands[2] = results[2];
+   ir->operands[3] = results[3];
+
+   this->progress = true;
+}
+
 void
 lower_instructions_visitor::carry_to_arith(ir_expression *ir)
 {
@@ -1055,6 +1262,11 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
 	 int_div_to_mul_rcp(ir);
       else if (ir->operands[1]->type->is_float() && lowering(DIV_TO_MUL_RCP))
 	 div_to_mul_rcp(ir);
+      break;
+
+   case ir_unop_sqrt:
+      if (lowering(DSQRT_TO_FSQRT))
+         dsqrt_to_fsqrt(ir);
       break;
 
    case ir_unop_exp:
