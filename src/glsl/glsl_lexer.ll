@@ -472,23 +472,23 @@ layout		{
 			}
 
 [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?(lf|LF)	{
-			    yylval->dreal = glsl_strtod(yytext, NULL);
+			    yylval->dreal = _mesa_strtod(yytext, NULL);
 			    return DOUBLECONSTANT;
 			}
 \.[0-9]+([eE][+-]?[0-9]+)?(lf|LF)		{
-			    yylval->dreal = glsl_strtod(yytext, NULL);
+			    yylval->dreal = _mesa_strtod(yytext, NULL);
 			    return DOUBLECONSTANT;
 			}
 [0-9]+\.([eE][+-]?[0-9]+)?(lf|LF)		{
-			    yylval->dreal = glsl_strtod(yytext, NULL);
+			    yylval->dreal = _mesa_strtod(yytext, NULL);
 			    return DOUBLECONSTANT;
 			}
 [0-9]+[eE][+-]?[0-9]+(lf|LF)	{
-			    yylval->dreal = glsl_strtod(yytext, NULL);
+			    yylval->dreal = _mesa_strtod(yytext, NULL);
 			    return DOUBLECONSTANT;
 			}
 [0-9]+(lf|LF)		{
-			    yylval->dreal = glsl_strtod(yytext, NULL);
+			    yylval->dreal = _mesa_strtod(yytext, NULL);
 			    return DOUBLECONSTANT;
 			}
 
