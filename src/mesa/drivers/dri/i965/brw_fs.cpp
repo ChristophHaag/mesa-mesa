@@ -3544,6 +3544,8 @@ fs_visitor::run()
 
       calculate_cfg();
 
+      lower_double_float();
+
       split_virtual_grfs();
 
       move_uniform_array_access_to_pull_constants();
