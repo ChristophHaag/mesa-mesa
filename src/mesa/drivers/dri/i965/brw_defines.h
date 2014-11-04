@@ -903,6 +903,17 @@ enum opcode {
    SHADER_OPCODE_GEN4_SCRATCH_WRITE,
    SHADER_OPCODE_GEN7_SCRATCH_READ,
 
+   /**
+    * Copies low 32 bits of 64-bit channels. When double floats are converted
+    * to single precision the hardware writes 64-bits filling the upper 32
+    * with undefined value.
+    * This instruction can be used to copy (execution width / 2) many low
+    * 32-bits. Ideally one would move full execution width many channels but
+    * that would require two source registers to be close enough so that
+    * vertical stride could define them as single source.
+    */
+   SHADER_OPCODE_MOV_LOW_2x32_HALF_EXEC_WIDTH,
+
    FS_OPCODE_DDX,
    FS_OPCODE_DDY,
    FS_OPCODE_PIXEL_X,

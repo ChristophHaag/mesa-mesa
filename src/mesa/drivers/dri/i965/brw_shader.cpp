@@ -445,6 +445,9 @@ brw_instruction_name(enum opcode op)
    case SHADER_OPCODE_GEN7_SCRATCH_READ:
       return "gen7_scratch_read";
 
+   case SHADER_OPCODE_MOV_LOW_2x32_HALF_EXEC_WIDTH:
+      return "mov_low_2X32_half_exec_width";
+
    case FS_OPCODE_DDX:
       return "ddx";
    case FS_OPCODE_DDY:
