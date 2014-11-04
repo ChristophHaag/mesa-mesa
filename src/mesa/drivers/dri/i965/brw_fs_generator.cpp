@@ -2048,6 +2048,33 @@ fs_generator::generate_code(const cfg_t *cfg)
 	 generate_scratch_read_gen7(inst, dst);
 	 break;
 
+      case SHADER_OPCODE_MOV_LOW_2x32_HALF_EXEC_WIDTH:
+         assert(brw->gen >= 7);
+         assert(inst->sources == 2);
+         assert(dst.type == BRW_REGISTER_TYPE_F);
+         assert(src[0].type == BRW_REGISTER_TYPE_F);
+         assert(src[1].type == BRW_REGISTER_TYPE_F);
+         dst.width = BRW_WIDTH_4;
+         /* Tell the hardware that there are in fact single precision floats
+          * but that each occupies 64-bits.
+          */
+         src[0].width = (inst->exec_size == 16) ? BRW_WIDTH_8 : BRW_WIDTH_4;
+         src[0].hstride = BRW_HORIZONTAL_STRIDE_2;
+         src[0].vstride = (inst->exec_size == 16) ?
+                          BRW_VERTICAL_STRIDE_16 : BRW_VERTICAL_STRIDE_8;
+         brw_MOV(p, dst, src[0]);
+
+         if (inst->exec_size == 16)
+            ++dst.nr;
+         else
+            dst.subnr = 4 * 4;
+         src[1].width = (inst->exec_size == 16) ? BRW_WIDTH_8 : BRW_WIDTH_4;
+         src[1].hstride = BRW_HORIZONTAL_STRIDE_2;
+         src[1].vstride = (inst->exec_size == 16) ?
+                          BRW_VERTICAL_STRIDE_16 : BRW_VERTICAL_STRIDE_8;
+         brw_MOV(p, dst, src[1]);
+	 break;
+
       case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
 	 generate_uniform_pull_constant_load(inst, dst, src[0], src[1]);
 	 break;
