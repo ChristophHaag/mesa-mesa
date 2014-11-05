@@ -3544,6 +3544,10 @@ fs_visitor::run()
 
       calculate_cfg();
 
+      if (unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER)) {
+         backend_visitor::dump_instructions("fs_before_df_split");
+      }
+
       lower_double_float();
 
       split_virtual_grfs();
