@@ -48,6 +48,8 @@ static void guess_execution_size(struct brw_compile *p,
 
    if (reg.width == BRW_WIDTH_8 && p->compressed) {
       brw_inst_set_exec_size(brw, insn, BRW_EXECUTE_16);
+   } else if (reg.width == BRW_WIDTH_4 && p->compressed) {
+      brw_inst_set_exec_size(brw, insn, BRW_EXECUTE_8);
    } else {
       /* Register width definitions are compatible with BRW_EXECUTE_* enums. */
       brw_inst_set_exec_size(brw, insn, reg.width);
