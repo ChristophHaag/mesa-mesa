@@ -48,6 +48,7 @@ public:
                                    backend_instruction *) const = 0;
    virtual void lower_double_to_float(bblock_t *,
                                       backend_instruction *) const = 0;
+   virtual void lower_cmp(bblock_t *, backend_instruction *) const = 0;
 };
 
 static bool
@@ -80,6 +81,9 @@ lower_double_float(const inst_traits& traits,
             traits.lower_double_to_float(block, inst);
             break;
          }
+      case BRW_OPCODE_CMP:
+         traits.lower_cmp(block, inst);
+         break;
       default:
          inst->insert_after(block, traits.get_2nd_half(inst));
       }
@@ -102,6 +106,7 @@ public:
                                    backend_instruction *inst) const;
    virtual void lower_double_to_float(bblock_t *block,
                                       backend_instruction *inst) const;
+   virtual void lower_cmp(bblock_t *block, backend_instruction *cmp) const;
 
 private:
    fs_reg get_2nd_half(fs_reg reg) const;
@@ -181,6 +186,41 @@ fs_inst_traits::lower_double_to_float(bblock_t *block,
       block,
       new(v->mem_ctx) fs_inst(
          SHADER_OPCODE_MOV_LOW_2x32_HALF_EXEC_WIDTH, orig_dst, x, y));
+}
+
+void
+fs_inst_traits::lower_cmp(bblock_t *block, backend_instruction *cmp) const
+{
+   fs_inst *cmp_1st_half = ((fs_inst *)cmp);
+
+   if (cmp_1st_half->dst.type == BRW_REGISTER_TYPE_DF) {
+      cmp_1st_half->insert_after(block, get_2nd_half(cmp_1st_half));
+      return;
+   }
+
+   fs_reg orig_dst = cmp_1st_half->dst;
+   fs_reg tmp_res(v, glsl_type::double_type);
+
+   cmp_1st_half->dst = tmp_res;
+   fs_inst *cmp_2nd_half = (fs_inst *)get_2nd_half(cmp_1st_half);
+   cmp_1st_half->insert_after(block, cmp_2nd_half);
+
+   /* Pack the double precision results into single precision - all the
+    * 64-bits are simply up or down per channel, and one can simply pick
+    * either the high or low 32-bits.
+    */
+   fs_reg res_f(v, glsl_type::float_type);
+   fs_inst *pack = new(v->mem_ctx) fs_inst(
+                      SHADER_OPCODE_MOV_LOW_2x32_HALF_EXEC_WIDTH,
+                      res_f,
+                      retype(tmp_res, BRW_REGISTER_TYPE_F),
+                      offset(retype(tmp_res, BRW_REGISTER_TYPE_F), 1));
+   cmp_2nd_half->insert_after(block, pack);
+
+   fs_inst *cmp_f = new(v->mem_ctx) fs_inst(BRW_OPCODE_CMP,
+                                            orig_dst, res_f, fs_reg(0.0f));
+   cmp_f->conditional_mod = BRW_CONDITIONAL_NEQ;
+   pack->insert_after(block, cmp_f);
 }
 
 bool
