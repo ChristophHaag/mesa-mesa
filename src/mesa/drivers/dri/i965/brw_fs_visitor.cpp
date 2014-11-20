@@ -850,6 +850,9 @@ fs_visitor::visit(ir_expression *ir)
    case ir_unop_u2f:
    case ir_unop_f2i:
    case ir_unop_f2u:
+   case ir_unop_f2d:
+   case ir_unop_i2d:
+   case ir_unop_u2d:
       emit(MOV(this->result, op[0]));
       break;
 
@@ -1103,9 +1106,6 @@ fs_visitor::visit(ir_expression *ir)
       unreachable("already handled above");
       break;
 
-   case ir_unop_f2d:
-   case ir_unop_i2d:
-   case ir_unop_u2d:
    case ir_unop_pack_double_2x32:
    case ir_unop_frexp_sig:
    case ir_unop_frexp_exp:

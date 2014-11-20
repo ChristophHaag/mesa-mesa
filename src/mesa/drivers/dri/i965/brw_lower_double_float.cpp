@@ -133,8 +133,13 @@ fs_inst_traits::is_double(const backend_instruction *base_inst) const
 fs_reg
 fs_inst_traits::get_2nd_half(fs_reg reg) const
 {
-   if (reg.file == GRF && reg.width)
+   if (reg.file == GRF &&
+       reg.width &&
+       reg.type == BRW_REGISTER_TYPE_DF)
       reg.reg_offset += (reg.width / 8);
+   else if (reg.type != BRW_REGISTER_TYPE_DF)
+      reg = horiz_offset(reg, 4);
+
    return reg;
 }
 
