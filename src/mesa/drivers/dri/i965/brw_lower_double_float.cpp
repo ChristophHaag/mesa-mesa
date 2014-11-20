@@ -46,8 +46,8 @@ public:
    virtual backend_instruction *get_2nd_half(backend_instruction *) const = 0;
    virtual backend_instruction *get_pack_2x32_2nd_half(
                                    backend_instruction *) const = 0;
-   virtual void lower_double_to_float(bblock_t *,
-                                      backend_instruction *) const = 0;
+   virtual void lower_double_conversion(bblock_t *,
+                                        backend_instruction *) const = 0;
    virtual void lower_cmp(bblock_t *, backend_instruction *) const = 0;
 };
 
@@ -77,10 +77,10 @@ lower_double_float(const inst_traits& traits,
           * be first a separate conversion followed by a copy from the lower
           * 32-bits to the final destination.
           */
-         if (inst->dst.type == BRW_REGISTER_TYPE_F) {
-            traits.lower_double_to_float(block, inst);
+         if (inst->dst.type != BRW_REGISTER_TYPE_DF) {
+            traits.lower_double_conversion(block, inst);
             break;
-         }
+         }         
       case BRW_OPCODE_CMP:
          traits.lower_cmp(block, inst);
          break;
@@ -104,8 +104,8 @@ public:
    virtual backend_instruction *get_2nd_half(backend_instruction *inst) const;
    virtual backend_instruction *get_pack_2x32_2nd_half(
                                    backend_instruction *inst) const;
-   virtual void lower_double_to_float(bblock_t *block,
-                                      backend_instruction *inst) const;
+   virtual void lower_double_conversion(bblock_t *block,
+                                        backend_instruction *inst) const;
    virtual void lower_cmp(bblock_t *block, backend_instruction *cmp) const;
 
 private:
@@ -165,13 +165,17 @@ fs_inst_traits::get_pack_2x32_2nd_half(backend_instruction *base_inst) const
 }
 
 void
-fs_inst_traits::lower_double_to_float(bblock_t *block,
-                                      backend_instruction *base_inst) const
+fs_inst_traits::lower_double_conversion(bblock_t *block,
+                                        backend_instruction *base_inst) const
 {
    fs_reg x(v, glsl_type::float_type);
    fs_reg y(v, glsl_type::float_type);
    fs_inst *inst_mov_x = ((fs_inst *)base_inst);
    fs_reg orig_dst(inst_mov_x->dst);
+
+   /* HACK: Force the correct type */
+   x.type = orig_dst.type;
+   y.type = orig_dst.type;
 
    /* Use the original instruction to convert the first half to a temp. */
    inst_mov_x->dst = x;

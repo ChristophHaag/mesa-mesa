@@ -844,6 +844,8 @@ fs_visitor::visit(ir_expression *ir)
       this->result = op[0];
       break;
    case ir_unop_d2f:
+   case ir_unop_d2i:
+   case ir_unop_d2u:
    case ir_unop_i2f:
    case ir_unop_u2f:
    case ir_unop_f2i:
@@ -1102,9 +1104,7 @@ fs_visitor::visit(ir_expression *ir)
       break;
 
    case ir_unop_f2d:
-   case ir_unop_d2i:
    case ir_unop_i2d:
-   case ir_unop_d2u:
    case ir_unop_u2d:
    case ir_unop_pack_double_2x32:
    case ir_unop_frexp_sig:
