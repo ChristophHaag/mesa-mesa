@@ -60,7 +60,6 @@ static INLINE uint32_t r300_translate_blend_function(int blend_func,
     return 0;
 }
 
-/* XXX we can also offer the D3D versions of some of these... */
 static INLINE uint32_t r300_translate_blend_factor(int blend_fact)
 {
     switch (blend_fact) {
@@ -99,17 +98,15 @@ static INLINE uint32_t r300_translate_blend_factor(int blend_fact)
         case PIPE_BLENDFACTOR_SRC1_ALPHA:
         case PIPE_BLENDFACTOR_INV_SRC1_COLOR:
         case PIPE_BLENDFACTOR_INV_SRC1_ALPHA:
-            fprintf(stderr, "r300: Implementation error: "
-                "Bad blend factor %d not supported!\n", blend_fact);
-            assert(0);
-            break;
+            fprintf(stderr, "r300: Unsupported blend factor %d!\n",
+                    blend_fact);
+            return R300_BLEND_GL_ZERO;
 
         default:
             fprintf(stderr, "r300: Unknown blend factor %d\n", blend_fact);
             assert(0);
-            break;
+            return 0;
     }
-    return 0;
 }
 
 /* DSA state. */
