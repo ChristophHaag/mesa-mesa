@@ -2415,7 +2415,7 @@ fs_visitor::visit(ir_constant *ir)
                /* 64-bit immediates are not supported before gen8 */
                const unsigned *u = (const unsigned *)&ir->value.d[i];
                emit(FS_OPCODE_PACK_DOUBLE_2x32, dst_reg,
-                    fs_reg(u[0]), fs_reg(u[1]));
+                    fs_reg(u[1]), fs_reg(u[0]));
             }
             break;
 	 case GLSL_TYPE_FLOAT:
