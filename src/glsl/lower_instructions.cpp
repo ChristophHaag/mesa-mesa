@@ -1265,7 +1265,7 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
       break;
 
    case ir_unop_sqrt:
-      if (lowering(DSQRT_TO_FSQRT))
+      if (lowering(DSQRT_TO_FSQRT) && ir->operands[0]->type->is_double())
          dsqrt_to_fsqrt(ir);
       break;
 
