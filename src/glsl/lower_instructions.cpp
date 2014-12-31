@@ -45,6 +45,7 @@
  * - SAT_TO_CLAMP
  * - DOPS_TO_DFRAC
  * - DSQRT_TO_FSQRT
+ * - DFLOOR_TO_ARITH
  *
  * SUB_TO_ADD_NEG:
  * ---------------
@@ -125,6 +126,10 @@
  * --------------
  * Splits double square root into exponent division and single precision
  * square root.
+ *
+ * DFLOOR_TO_ARITH
+ * ---------------
+ * Provides floor with pure luck.
  */
 
 #include "main/core.h" /* for M_LOG2E */
@@ -170,6 +175,7 @@ private:
    void double_lrp(ir_expression *);
    void dceil_to_dfrac(ir_expression *);
    void dfloor_to_dfrac(ir_expression *);
+   void dfloor_to_arith(ir_expression *);
    void dround_even_to_dfrac(ir_expression *);
    void dtrunc_to_dfrac(ir_expression *);
    void dsign_to_csel(ir_expression *);
@@ -1095,6 +1101,105 @@ lower_instructions_visitor::dceil_to_dfrac(ir_expression *ir)
    ir->operands[1] = new(ir) ir_dereference_variable(t2);
 }
 
+
+void
+lower_instructions_visitor::dfloor_to_arith(ir_expression *ir)
+{
+   ir_instruction &i = *base_ir;
+   exec_list instructions;
+   ir_factory factory;
+   factory.instructions = &instructions;
+   factory.mem_ctx = ir;
+
+   const unsigned vec_elem = ir->type->vector_elements;
+   ir_rvalue *results[4] = {NULL};
+
+   for (unsigned elem = 0; elem < vec_elem; elem++) {
+
+      // 3 cases:
+      // value = 0.0
+      // value < 0.0
+
+      // 3. value > 0.0
+      //
+      // if exp < 0, floor(x) = 0
+      // if exp = 0, floor(x) = 1
+      // else ...
+
+
+      ir_variable *unpacked =
+         factory.make_temp(glsl_type::uvec2_type, "unpacked");
+
+      factory.emit(assign(unpacked,
+                          expr(ir_unop_unpack_double_2x32,
+                          swizzle(ir->operands[0]->clone(ir, NULL), elem, 1))));
+
+      ir_rvalue *hi  = swizzle_y(unpacked);
+      ir_rvalue *hi2 = swizzle_y(unpacked);
+
+      // extract components s, m, e from hi
+
+      ir_variable *exponent =
+         factory.make_temp(glsl_type::uint_type, "exponent");
+
+      ir_variable *mantissa =
+         factory.make_temp(glsl_type::uint_type, "mantissa");
+
+      // *e = (bits >> 20) & 0x7ff;
+      // (exp = e - DOUBLE_BIAS)
+      factory.emit(assign(exponent,
+                          sub(bit_and(rshift(hi, factory.constant(20u)),
+                                         factory.constant(0x7ffu)), factory.constant(1023u))));
+
+      // *m = bits & 0xfffff; (20 last bits)
+      factory.emit(assign(mantissa,
+                          bit_and(hi2, factory.constant(0xfffffu))));
+
+      // calculate MANTISSA_BITS - exp
+      ir_variable *nmb =
+         factory.make_temp(glsl_type::uint_type, "nmb");
+      factory.emit(assign(nmb, sub(factory.constant(20u), exponent)));
+
+      ir_variable *result =
+        factory.make_temp(glsl_type::uint_type, "result");
+
+      // some temporary helpers
+      ir_variable *a =
+        factory.make_temp(glsl_type::uint_type, "a");
+      ir_variable *b =
+        factory.make_temp(glsl_type::uint_type, "b");
+
+      // return uint32_t mf = (1 << exp) + (m >> nmb)  ... or exp2f(exp) + (m >> nmb)
+      factory.emit(assign(a, lshift(factory.constant(1u), exponent)));
+      factory.emit(assign(b, rshift(mantissa, nmb)));
+      factory.emit(assign(result, add(a, b)));
+
+      // unsigned -> signed conversion
+      ir_variable *c =
+        factory.make_temp(glsl_type::int_type, "c");
+      factory.emit(assign(c, expr(ir_unop_u2i, result)));
+
+      // hack for testing result delivery
+      // factory.emit(assign(result, factory.constant(3u)));
+
+      // signed -> double conversion
+      results[elem] = expr(ir_unop_i2d, c);
+   }
+
+   _mesa_print_ir(stderr, &instructions, NULL);
+   i.insert_before(&instructions);
+
+   /* Put the dvec back together */
+   ir->operation = ir_quadop_vector;
+   ir->operands[0] = results[0];
+   ir->operands[1] = results[1];
+   ir->operands[2] = results[2];
+   ir->operands[3] = results[3];
+
+   this->progress = true;
+}
+
+
 void
 lower_instructions_visitor::dfloor_to_dfrac(ir_expression *ir)
 {
@@ -1264,6 +1369,11 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
 	 div_to_mul_rcp(ir);
       break;
 
+   case ir_unop_floor:
+      if (lowering(DFLOOR_TO_ARITH) && ir->operands[0]->type->is_double())
+         dfloor_to_arith(ir);
+      break;
+
    case ir_unop_sqrt:
       if (lowering(DSQRT_TO_FSQRT) && ir->operands[0]->type->is_double())
          dsqrt_to_fsqrt(ir);
@@ -1336,10 +1446,12 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
          dceil_to_dfrac(ir);
       break;
 
+#if 0
    case ir_unop_floor:
       if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())
          dfloor_to_dfrac(ir);
       break;
+#endif
 
    case ir_unop_round_even:
       if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())

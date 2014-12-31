@@ -44,6 +44,7 @@
 #define DOPS_TO_DFRAC      0x1000
 #define DFREXP_DLDEXP_TO_ARITH    0x2000
 #define DSQRT_TO_FSQRT            0x4000
+#define DFLOOR_TO_ARITH           0x8000
 
 /**
  * \see class lower_packing_builtins_visitor
