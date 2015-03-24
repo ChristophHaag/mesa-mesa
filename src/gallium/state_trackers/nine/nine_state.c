@@ -41,6 +41,13 @@
 /* State preparation only */
 
 static INLINE void
+prepare_blend(struct NineDevice9 *device)
+{
+    nine_convert_blend_state(&device->state.pipe.blend, device->state.rs);
+    device->state.commit |= NINE_STATE_COMMIT_BLEND;
+}
+
+static INLINE void
 prepare_dsa(struct NineDevice9 *device)
 {
     nine_convert_dsa_state(&device->state.pipe.dsa, device->state.rs);
@@ -196,14 +203,6 @@ update_viewport(struct NineDevice9 *device)
 
     pipe->set_viewport_states(pipe, 0, 1, &pvport);
 }
-
-
-static INLINE void
-update_blend(struct NineDevice9 *device)
-{
-    nine_convert_blend_state(device->cso, device->state.rs);
-}
-
 
 /* Loop through VS inputs and pick the vertex elements with the declared
  * usage from the vertex declaration, then insert the instance divisor from
@@ -872,6 +871,12 @@ update_textures_and_samplers(struct NineDevice9 *device)
 /* State commit only */
 
 static INLINE void
+commit_blend(struct NineDevice9 *device)
+{
+    cso_set_blend(device->cso, &device->state.pipe.blend);
+}
+
+static INLINE void
 commit_dsa(struct NineDevice9 *device)
 {
     cso_set_depth_stencil_alpha(device->cso, &device->state.pipe.dsa);
@@ -985,7 +990,7 @@ nine_update_state(struct NineDevice9 *device)
         if (group & NINE_STATE_DSA)
             prepare_dsa(device);
         if (group & NINE_STATE_BLEND)
-            update_blend(device);
+            prepare_blend(device);
 
         if (group & NINE_STATE_VS)
             group |= update_vs(device);
@@ -1043,6 +1048,8 @@ nine_update_state(struct NineDevice9 *device)
     if (state->changed.vtxbuf)
         update_vertex_buffers(device);
 
+    if (state->commit & NINE_STATE_COMMIT_BLEND)
+        commit_blend(device);
     if (state->commit & NINE_STATE_COMMIT_DSA)
         commit_dsa(device);
     if (state->commit & NINE_STATE_COMMIT_RASTERIZER)
