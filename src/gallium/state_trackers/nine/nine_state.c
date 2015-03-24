@@ -46,6 +46,13 @@ prepare_dsa(struct NineDevice9 *device)
     device->state.commit |= NINE_STATE_COMMIT_DSA;
 }
 
+static INLINE void
+prepare_rasterizer(struct NineDevice9 *device)
+{
+    nine_convert_rasterizer_state(&device->state.pipe.rast, device->state.rs);
+    device->state.commit |= NINE_STATE_COMMIT_RASTERIZER;
+}
+
 /* State preparation incremental */
 
 /* State preparation + State commit */
@@ -196,11 +203,6 @@ update_blend(struct NineDevice9 *device)
     nine_convert_blend_state(device->cso, device->state.rs);
 }
 
-static INLINE void
-update_rasterizer(struct NineDevice9 *device)
-{
-    nine_convert_rasterizer_state(device->cso, device->state.rs);
-}
 
 /* Loop through VS inputs and pick the vertex elements with the declared
  * usage from the vertex declaration, then insert the instance divisor from
@@ -337,6 +339,7 @@ update_vs(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
     struct NineVertexShader9 *vs = state->vs;
+    const DWORD *rs = state->rs;
     uint32_t changed_group = 0;
 
     /* likely because we dislike FF */
@@ -860,6 +863,12 @@ commit_scissor(struct NineDevice9 *device)
 }
 
 static INLINE void
+commit_rasterizer(struct NineDevice9 *device)
+{
+    cso_set_rasterizer(device->cso, &device->state.pipe.rast);
+}
+
+static INLINE void
 commit_index_buffer(struct NineDevice9 *device)
 {
     struct pipe_context *pipe = device->pipe;
@@ -959,7 +968,7 @@ nine_update_state(struct NineDevice9 *device)
             group |= update_vs(device);
 
         if (group & NINE_STATE_RASTERIZER)
-            update_rasterizer(device);
+            prepare_rasterizer(device);
 
         if (group & NINE_STATE_PS)
             group |= update_ps(device);
@@ -1013,6 +1022,8 @@ nine_update_state(struct NineDevice9 *device)
 
     if (state->commit & NINE_STATE_COMMIT_DSA)
         commit_dsa(device);
+    if (state->commit & NINE_STATE_COMMIT_RASTERIZER)
+        commit_rasterizer(device);
 
     state->commit = 0;
 
