@@ -120,6 +120,90 @@ _mesa_shader_enum_to_shader_stage(GLenum v)
 }
 
 
+static inline const char *
+_mesa_shader_stage_to_subroutine_prefix(gl_shader_stage stage)
+{
+  switch (stage) {
+  case MESA_SHADER_VERTEX:
+    return "__subu_v";
+  case MESA_SHADER_GEOMETRY:
+    return "__subu_g";
+  case MESA_SHADER_FRAGMENT:
+    return "__subu_f";
+  case MESA_SHADER_COMPUTE:
+    return "__subu_c";
+  default:
+    return NULL;
+  }
+}
+
+static inline gl_shader_stage
+_mesa_shader_stage_from_subroutine_uniform(GLenum subuniform)
+{
+   switch (subuniform) {
+   default:
+   case GL_VERTEX_SUBROUTINE_UNIFORM:
+      return MESA_SHADER_VERTEX;
+   case GL_GEOMETRY_SUBROUTINE_UNIFORM:
+      return MESA_SHADER_GEOMETRY;
+   case GL_FRAGMENT_SUBROUTINE_UNIFORM:
+      return MESA_SHADER_FRAGMENT;
+   case GL_COMPUTE_SUBROUTINE_UNIFORM:
+      return MESA_SHADER_COMPUTE;
+   /* TODO - COMPUTE, TESS */
+   }
+}
+
+static inline gl_shader_stage
+_mesa_shader_stage_from_subroutine(GLenum subroutine)
+{
+   switch (subroutine) {
+   case GL_VERTEX_SUBROUTINE:
+      return MESA_SHADER_VERTEX;
+   case GL_GEOMETRY_SUBROUTINE:
+      return MESA_SHADER_GEOMETRY;
+   case GL_FRAGMENT_SUBROUTINE:
+      return MESA_SHADER_FRAGMENT;
+   case GL_COMPUTE_SUBROUTINE:
+      return MESA_SHADER_COMPUTE;
+   /* TODO - TESS */
+   }
+}
+
+static inline GLenum
+_mesa_shader_stage_to_subroutine(gl_shader_stage stage)
+{
+   switch (stage) {
+   default:
+   case MESA_SHADER_VERTEX:
+      return GL_VERTEX_SUBROUTINE;
+   case MESA_SHADER_GEOMETRY:
+      return GL_GEOMETRY_SUBROUTINE;
+   case MESA_SHADER_FRAGMENT:
+      return GL_FRAGMENT_SUBROUTINE;
+   case MESA_SHADER_COMPUTE:
+      return GL_COMPUTE_SUBROUTINE;
+   /* TODO - TESS */
+   }
+}
+
+static inline GLenum
+_mesa_shader_stage_to_subroutine_uniform(gl_shader_stage stage)
+{
+   switch (stage) {
+   default:
+   case MESA_SHADER_VERTEX:
+      return GL_VERTEX_SUBROUTINE_UNIFORM;
+   case MESA_SHADER_GEOMETRY:
+      return GL_GEOMETRY_SUBROUTINE_UNIFORM;
+   case MESA_SHADER_FRAGMENT:
+      return GL_FRAGMENT_SUBROUTINE_UNIFORM;
+   case MESA_SHADER_COMPUTE:
+      return GL_COMPUTE_SUBROUTINE_UNIFORM;
+   /* TODO - TESS */
+   }
+}
+
 #ifdef __cplusplus
 }
 #endif
