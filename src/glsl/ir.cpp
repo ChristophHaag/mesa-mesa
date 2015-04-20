@@ -411,7 +411,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
    case ir_binop_gequal:
    case ir_binop_less:
    case ir_binop_greater:
-      assert(op0->type == op1->type);
+      assert(op0->type->is_subroutine() || op0->type == op1->type);
       this->type = glsl_type::get_instance(GLSL_TYPE_BOOL,
 					   op0->type->vector_elements, 1);
       break;
