@@ -114,6 +114,8 @@ struct gl_uniform_storage {
 
    struct gl_opaque_uniform_index image[MESA_SHADER_STAGES];
 
+   struct gl_opaque_uniform_index subroutine[MESA_SHADER_STAGES];
+
    /**
     * Storage used by the driver for the uniform
     */
