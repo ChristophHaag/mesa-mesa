@@ -265,6 +265,9 @@ _mesa_get_program_resourceiv(struct gl_shader_program *shProg,
                              GLint *params);
 
 /* GL_ARB_shader_subroutine */
+void
+_mesa_shader_program_init_subroutine_defaults(struct gl_shader_program *shProg);
+
 extern GLint GLAPIENTRY
 _mesa_GetSubroutineUniformLocation(GLuint program, GLenum shadertype,
                                    const GLchar *name);
