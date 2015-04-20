@@ -2371,6 +2371,15 @@ struct gl_ati_fragment_shader_state
    struct ati_fragment_shader *Current;
 };
 
+/**
+ *  Shader subroutine function definition
+ */
+struct gl_subroutine_function
+{
+   char *name;
+   int num_compat_types;
+   const struct glsl_type **types;
+};
 
 /**
  * A GLSL vertex or fragment shader object.
@@ -2521,6 +2530,12 @@ struct gl_shader
        */
       unsigned LocalSize[3];
    } Comp;
+
+   GLuint NumSubroutineUniformTypes;
+   GLuint NumSubroutineUniforms;
+   struct gl_uniform_storage **SubroutineUniformRemapTable;
+   GLuint NumSubroutineFunctions;
+   struct gl_subroutine_function *SubroutineFunctions;
 };
 
 
