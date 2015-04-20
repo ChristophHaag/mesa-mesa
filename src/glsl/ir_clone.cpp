@@ -267,6 +267,13 @@ ir_function::clone(void *mem_ctx, struct hash_table *ht) const
 {
    ir_function *copy = new(mem_ctx) ir_function(this->name);
 
+   copy->is_subroutine = this->is_subroutine;
+   copy->is_subroutine_def = this->is_subroutine_def;
+   copy->num_subroutine_types = this->num_subroutine_types;
+   copy->subroutine_types = ralloc_array(mem_ctx, const struct glsl_type *, copy->num_subroutine_types);
+   for (int i = 0; i < copy->num_subroutine_types; i++)
+     copy->subroutine_types[i] = this->subroutine_types[i];
+
    foreach_in_list(const ir_function_signature, sig, &this->signatures) {
       ir_function_signature *sig_copy = sig->clone(mem_ctx, ht);
       copy->add_signature(sig_copy);
