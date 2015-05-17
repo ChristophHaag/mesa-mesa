@@ -135,6 +135,7 @@ struct si_context {
 	void				*pstipple_sampler_state;
 	struct si_screen		*screen;
 	struct si_pm4_state		*init_config;
+	struct si_shader_selector	*fixed_func_tcs_shader;
 
 	union {
 		struct {
