@@ -67,17 +67,26 @@
 #define NINE_STATE_BLEND_COLOR (1 << 16)
 #define NINE_STATE_STENCIL_REF (1 << 17)
 #define NINE_STATE_SAMPLE_MASK (1 << 18)
-#define NINE_STATE_MISC_CONST  (1 << 19)
-#define NINE_STATE_FF          (0x1f << 20)
-#define NINE_STATE_FF_VS       (0x17 << 20)
-#define NINE_STATE_FF_PS       (0x18 << 20)
-#define NINE_STATE_FF_LIGHTING (1 << 20)
-#define NINE_STATE_FF_MATERIAL (1 << 21)
-#define NINE_STATE_FF_VSTRANSF (1 << 22)
-#define NINE_STATE_FF_PSSTAGES (1 << 23)
-#define NINE_STATE_FF_OTHER    (1 << 24)
-#define NINE_STATE_ALL          0x1ffffff
-#define NINE_STATE_UNHANDLED   (1 << 25)
+#define NINE_STATE_FF          (0x1f << 19)
+#define NINE_STATE_FF_VS       (0x17 << 19)
+#define NINE_STATE_FF_PS       (0x18 << 19)
+#define NINE_STATE_FF_LIGHTING (1 << 19)
+#define NINE_STATE_FF_MATERIAL (1 << 20)
+#define NINE_STATE_FF_VSTRANSF (1 << 21)
+#define NINE_STATE_FF_PSSTAGES (1 << 22)
+#define NINE_STATE_FF_OTHER    (1 << 23)
+#define NINE_STATE_FOG_SHADER  (1 << 24)
+#define NINE_STATE_PS1X_SHADER (1 << 25)
+#define NINE_STATE_ALL          0x3ffffff
+#define NINE_STATE_UNHANDLED   (1 << 26)
+
+#define NINE_STATE_COMMIT_DSA  (1 << 0)
+#define NINE_STATE_COMMIT_RASTERIZER (1 << 1)
+#define NINE_STATE_COMMIT_BLEND (1 << 2)
+#define NINE_STATE_COMMIT_CONST_VS (1 << 3)
+#define NINE_STATE_COMMIT_CONST_PS (1 << 4)
+#define NINE_STATE_COMMIT_VS (1 << 5)
+#define NINE_STATE_COMMIT_PS (1 << 6)
 
 
 #define NINE_MAX_SIMULTANEOUS_RENDERTARGETS 4
@@ -124,7 +133,6 @@ struct nine_state
         uint16_t vs_const_b; /* NINE_MAX_CONST_B == 16 */
         uint16_t ps_const_b;
         uint8_t ucp;
-        boolean srgb;
     } changed;
 
     struct NineSurface9 *rt[NINE_MAX_SIMULTANEOUS_RENDERTARGETS];
@@ -143,13 +151,13 @@ struct nine_state
     int    vs_const_i[NINE_MAX_CONST_I][4];
     BOOL   vs_const_b[NINE_MAX_CONST_B];
     float *vs_lconstf_temp;
-    uint32_t vs_key;
 
     struct NinePixelShader9 *ps;
     float *ps_const_f;
     int    ps_const_i[NINE_MAX_CONST_I][4];
     BOOL   ps_const_b[NINE_MAX_CONST_B];
-    uint32_t ps_key;
+    float *ps_lconstf_temp;
+    uint32_t bumpmap_vars[48];
 
     struct {
         void *vs;
@@ -170,10 +178,12 @@ struct nine_state
     uint8_t rt_mask;
 
     DWORD rs[NINED3DRS_COUNT];
+    DWORD rs_advertised[NINED3DRS_COUNT]; /* the ones app get with GetRenderState */
 
     struct NineBaseTexture9 *texture[NINE_MAX_SAMPLERS]; /* PS, DMAP, VS */
 
     DWORD samp[NINE_MAX_SAMPLERS][NINED3DSAMP_COUNT];
+    DWORD samp_advertised[NINE_MAX_SAMPLERS][NINED3DSAMP_COUNT];
     uint32_t samplers_shadow;
     uint8_t bound_samplers_mask_vs;
     uint16_t bound_samplers_mask_ps;
@@ -187,10 +197,6 @@ struct nine_state
             uint32_t tex_stage[NINE_MAX_SAMPLERS][(NINED3DTSS_COUNT + 31) / 32];
             uint32_t transform[(NINED3DTS_COUNT + 31) / 32];
         } changed;
-        struct {
-            boolean vs_const;
-            boolean ps_const;
-        } clobber;
 
         D3DMATRIX *transform; /* access only via nine_state_access_transform */
         unsigned num_transforms;
@@ -207,6 +213,17 @@ struct nine_state
 
         DWORD tex_stage[NINE_MAX_SAMPLERS][NINED3DTSS_COUNT];
     } ff;
+
+    uint32_t commit;
+    struct {
+        struct pipe_depth_stencil_alpha_state dsa;
+        struct pipe_rasterizer_state rast;
+        struct pipe_blend_state blend;
+        struct pipe_constant_buffer cb_vs;
+        struct pipe_constant_buffer cb_ps;
+        struct pipe_constant_buffer cb_vs_ff;
+        struct pipe_constant_buffer cb_ps_ff;
+    } pipe;
 };
 
 /* map D3DRS -> NINE_STATE_x
@@ -220,8 +237,10 @@ extern const uint32_t nine_render_states_vertex[(NINED3DRS_COUNT + 31) / 32];
 
 struct NineDevice9;
 
-boolean nine_update_state(struct NineDevice9 *, uint32_t group_mask);
+void nine_update_state_framebuffer(struct NineDevice9 *);
+boolean nine_update_state(struct NineDevice9 *);
 
+void nine_state_restore_non_cso(struct NineDevice9 *device);
 void nine_state_set_defaults(struct NineDevice9 *, const D3DCAPS9 *,
                              boolean is_reset);
 void nine_state_clear(struct nine_state *, const boolean device);
@@ -234,5 +253,121 @@ nine_state_access_transform(struct nine_state *, D3DTRANSFORMSTATETYPE,
                             boolean alloc);
 
 const char *nine_d3drs_to_string(DWORD State);
+
+static const DWORD nine_render_state_defaults[NINED3DRS_LAST + 1] =
+{
+ /* [D3DRS_ZENABLE] = D3DZB_TRUE; wine: auto_depth_stencil */
+    [D3DRS_ZENABLE] = D3DZB_FALSE,
+    [D3DRS_FILLMODE] = D3DFILL_SOLID,
+    [D3DRS_SHADEMODE] = D3DSHADE_GOURAUD,
+/*  [D3DRS_LINEPATTERN] = 0x00000000, */
+    [D3DRS_ZWRITEENABLE] = TRUE,
+    [D3DRS_ALPHATESTENABLE] = FALSE,
+    [D3DRS_LASTPIXEL] = TRUE,
+    [D3DRS_SRCBLEND] = D3DBLEND_ONE,
+    [D3DRS_DESTBLEND] = D3DBLEND_ZERO,
+    [D3DRS_CULLMODE] = D3DCULL_CCW,
+    [D3DRS_ZFUNC] = D3DCMP_LESSEQUAL,
+    [D3DRS_ALPHAFUNC] = D3DCMP_ALWAYS,
+    [D3DRS_ALPHAREF] = 0,
+    [D3DRS_DITHERENABLE] = FALSE,
+    [D3DRS_ALPHABLENDENABLE] = FALSE,
+    [D3DRS_FOGENABLE] = FALSE,
+    [D3DRS_SPECULARENABLE] = FALSE,
+/*  [D3DRS_ZVISIBLE] = 0, */
+    [D3DRS_FOGCOLOR] = 0,
+    [D3DRS_FOGTABLEMODE] = D3DFOG_NONE,
+    [D3DRS_FOGSTART] = 0x00000000,
+    [D3DRS_FOGEND] = 0x3F800000,
+    [D3DRS_FOGDENSITY] = 0x3F800000,
+/*  [D3DRS_EDGEANTIALIAS] = FALSE, */
+    [D3DRS_RANGEFOGENABLE] = FALSE,
+    [D3DRS_STENCILENABLE] = FALSE,
+    [D3DRS_STENCILFAIL] = D3DSTENCILOP_KEEP,
+    [D3DRS_STENCILZFAIL] = D3DSTENCILOP_KEEP,
+    [D3DRS_STENCILPASS] = D3DSTENCILOP_KEEP,
+    [D3DRS_STENCILREF] = 0,
+    [D3DRS_STENCILMASK] = 0xFFFFFFFF,
+    [D3DRS_STENCILFUNC] = D3DCMP_ALWAYS,
+    [D3DRS_STENCILWRITEMASK] = 0xFFFFFFFF,
+    [D3DRS_TEXTUREFACTOR] = 0xFFFFFFFF,
+    [D3DRS_WRAP0] = 0,
+    [D3DRS_WRAP1] = 0,
+    [D3DRS_WRAP2] = 0,
+    [D3DRS_WRAP3] = 0,
+    [D3DRS_WRAP4] = 0,
+    [D3DRS_WRAP5] = 0,
+    [D3DRS_WRAP6] = 0,
+    [D3DRS_WRAP7] = 0,
+    [D3DRS_CLIPPING] = TRUE,
+    [D3DRS_LIGHTING] = TRUE,
+    [D3DRS_AMBIENT] = 0,
+    [D3DRS_FOGVERTEXMODE] = D3DFOG_NONE,
+    [D3DRS_COLORVERTEX] = TRUE,
+    [D3DRS_LOCALVIEWER] = TRUE,
+    [D3DRS_NORMALIZENORMALS] = FALSE,
+    [D3DRS_DIFFUSEMATERIALSOURCE] = D3DMCS_COLOR1,
+    [D3DRS_SPECULARMATERIALSOURCE] = D3DMCS_COLOR2,
+    [D3DRS_AMBIENTMATERIALSOURCE] = D3DMCS_MATERIAL,
+    [D3DRS_EMISSIVEMATERIALSOURCE] = D3DMCS_MATERIAL,
+    [D3DRS_VERTEXBLEND] = D3DVBF_DISABLE,
+    [D3DRS_CLIPPLANEENABLE] = 0,
+/*  [D3DRS_SOFTWAREVERTEXPROCESSING] = FALSE, */
+    [D3DRS_POINTSIZE] = 0x3F800000,
+    [D3DRS_POINTSIZE_MIN] = 0x3F800000,
+    [D3DRS_POINTSPRITEENABLE] = FALSE,
+    [D3DRS_POINTSCALEENABLE] = FALSE,
+    [D3DRS_POINTSCALE_A] = 0x3F800000,
+    [D3DRS_POINTSCALE_B] = 0x00000000,
+    [D3DRS_POINTSCALE_C] = 0x00000000,
+    [D3DRS_MULTISAMPLEANTIALIAS] = TRUE,
+    [D3DRS_MULTISAMPLEMASK] = 0xFFFFFFFF,
+    [D3DRS_PATCHEDGESTYLE] = D3DPATCHEDGE_DISCRETE,
+/*  [D3DRS_PATCHSEGMENTS] = 0x3F800000, */
+    [D3DRS_DEBUGMONITORTOKEN] = 0xDEADCAFE,
+    [D3DRS_POINTSIZE_MAX] = 0x3F800000, /* depends on cap */
+    [D3DRS_INDEXEDVERTEXBLENDENABLE] = FALSE,
+    [D3DRS_COLORWRITEENABLE] = 0x0000000f,
+    [D3DRS_TWEENFACTOR] = 0x00000000,
+    [D3DRS_BLENDOP] = D3DBLENDOP_ADD,
+    [D3DRS_POSITIONDEGREE] = D3DDEGREE_CUBIC,
+    [D3DRS_NORMALDEGREE] = D3DDEGREE_LINEAR,
+    [D3DRS_SCISSORTESTENABLE] = FALSE,
+    [D3DRS_SLOPESCALEDEPTHBIAS] = 0,
+    [D3DRS_MINTESSELLATIONLEVEL] = 0x3F800000,
+    [D3DRS_MAXTESSELLATIONLEVEL] = 0x3F800000,
+    [D3DRS_ANTIALIASEDLINEENABLE] = FALSE,
+    [D3DRS_ADAPTIVETESS_X] = 0x00000000,
+    [D3DRS_ADAPTIVETESS_Y] = 0x00000000,
+    [D3DRS_ADAPTIVETESS_Z] = 0x3F800000,
+    [D3DRS_ADAPTIVETESS_W] = 0x00000000,
+    [D3DRS_ENABLEADAPTIVETESSELLATION] = FALSE,
+    [D3DRS_TWOSIDEDSTENCILMODE] = FALSE,
+    [D3DRS_CCW_STENCILFAIL] = D3DSTENCILOP_KEEP,
+    [D3DRS_CCW_STENCILZFAIL] = D3DSTENCILOP_KEEP,
+    [D3DRS_CCW_STENCILPASS] = D3DSTENCILOP_KEEP,
+    [D3DRS_CCW_STENCILFUNC] = D3DCMP_ALWAYS,
+    [D3DRS_COLORWRITEENABLE1] = 0x0000000F,
+    [D3DRS_COLORWRITEENABLE2] = 0x0000000F,
+    [D3DRS_COLORWRITEENABLE3] = 0x0000000F,
+    [D3DRS_BLENDFACTOR] = 0xFFFFFFFF,
+    [D3DRS_SRGBWRITEENABLE] = 0,
+    [D3DRS_DEPTHBIAS] = 0,
+    [D3DRS_WRAP8] = 0,
+    [D3DRS_WRAP9] = 0,
+    [D3DRS_WRAP10] = 0,
+    [D3DRS_WRAP11] = 0,
+    [D3DRS_WRAP12] = 0,
+    [D3DRS_WRAP13] = 0,
+    [D3DRS_WRAP14] = 0,
+    [D3DRS_WRAP15] = 0,
+    [D3DRS_SEPARATEALPHABLENDENABLE] = FALSE,
+    [D3DRS_SRCBLENDALPHA] = D3DBLEND_ONE,
+    [D3DRS_DESTBLENDALPHA] = D3DBLEND_ZERO,
+    [D3DRS_BLENDOPALPHA] = D3DBLENDOP_ADD,
+    [NINED3DRS_VSPOINTSIZE] = FALSE,
+    [NINED3DRS_RTMASK] = 0xf,
+    [NINED3DRS_ALPHACOVERAGE] = FALSE
+};
 
 #endif /* _NINE_STATE_H_ */

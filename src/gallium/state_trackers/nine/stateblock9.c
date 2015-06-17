@@ -179,6 +179,7 @@ nine_state_copy_common(struct nine_state *dst,
             const int r = ffs(m) - 1;
             m &= ~(1 << r);
             dst->rs[i * 32 + r] = src->rs[i * 32 + r];
+            dst->rs_advertised[i * 32 + r] = src->rs_advertised[i * 32 + r];
         }
     }
 
@@ -198,12 +199,14 @@ nine_state_copy_common(struct nine_state *dst,
         for (s = 0; s < NINE_MAX_SAMPLERS; ++s) {
             if (mask->changed.sampler[s] == 0x3ffe) {
                 memcpy(&dst->samp[s], &src->samp[s], sizeof(dst->samp[s]));
+                memcpy(&dst->samp_advertised[s], &src->samp_advertised[s], sizeof(dst->samp_advertised[s]));
             } else {
                 uint32_t m = mask->changed.sampler[s];
                 while (m) {
                     const int i = ffs(m) - 1;
                     m &= ~(1 << i);
                     dst->samp[s][i] = src->samp[s][i];
+                    dst->samp_advertised[s][i] = src->samp_advertised[s][i];
                 }
             }
             if (apply)
@@ -353,6 +356,7 @@ nine_state_copy_common_all(struct nine_state *dst,
 
     /* Render states. */
     memcpy(dst->rs, src->rs, sizeof(dst->rs));
+    memcpy(dst->rs_advertised, src->rs_advertised, sizeof(dst->rs_advertised));
     if (apply)
         memcpy(dst->changed.rs, src->changed.rs, sizeof(dst->changed.rs));
 
@@ -364,6 +368,7 @@ nine_state_copy_common_all(struct nine_state *dst,
 
     /* Sampler state. */
     memcpy(dst->samp, src->samp, sizeof(dst->samp));
+    memcpy(dst->samp_advertised, src->samp_advertised, sizeof(dst->samp_advertised));
     if (apply)
         memcpy(dst->changed.sampler,
                src->changed.sampler, sizeof(dst->changed.sampler));

@@ -27,7 +27,8 @@
 #include "cso_cache/cso_context.h"
 
 void
-nine_convert_dsa_state(struct cso_context *ctx, const DWORD *rs)
+nine_convert_dsa_state(struct pipe_depth_stencil_alpha_state *dsa_state,
+                       const DWORD *rs)
 {
     struct pipe_depth_stencil_alpha_state dsa;
 
@@ -65,12 +66,12 @@ nine_convert_dsa_state(struct cso_context *ctx, const DWORD *rs)
         dsa.alpha.ref_value = (float)rs[D3DRS_ALPHAREF] / 255.0f;
     }
 
-    cso_set_depth_stencil_alpha(ctx, &dsa);
+    *dsa_state = dsa;
 }
 
 /* TODO: Keep a static copy in device so we don't have to memset every time ? */
 void
-nine_convert_rasterizer_state(struct cso_context *ctx, const DWORD *rs)
+nine_convert_rasterizer_state(struct pipe_rasterizer_state *rast_state, const DWORD *rs)
 {
     struct pipe_rasterizer_state rast;
 
@@ -92,7 +93,7 @@ nine_convert_rasterizer_state(struct cso_context *ctx, const DWORD *rs)
  /* rast.poly_stipple_enable = 0; */
  /* rast.point_smooth = 0; */
     rast.sprite_coord_mode = PIPE_SPRITE_COORD_UPPER_LEFT;
-    rast.point_quad_rasterization = !!rs[D3DRS_POINTSPRITEENABLE];
+    rast.point_quad_rasterization = 1;
     rast.point_size_per_vertex = rs[NINED3DRS_VSPOINTSIZE];
     rast.multisample = !!rs[D3DRS_MULTISAMPLEANTIALIAS];
     rast.line_smooth = !!rs[D3DRS_ANTIALIASEDLINEENABLE];
@@ -110,12 +111,18 @@ nine_convert_rasterizer_state(struct cso_context *ctx, const DWORD *rs)
  /* rast.line_stipple_pattern = 0; */
     rast.sprite_coord_enable = rs[D3DRS_POINTSPRITEENABLE] ? 0xff : 0x00;
     rast.line_width = 1.0f;
-    rast.point_size = rs[NINED3DRS_VSPOINTSIZE] ? 1.0f : asfloat(rs[D3DRS_POINTSIZE]); /* XXX: D3DRS_POINTSIZE_MIN/MAX */
+    if (rs[NINED3DRS_VSPOINTSIZE]) {
+        rast.point_size = 1.0f;
+    } else {
+        rast.point_size = CLAMP(asfloat(rs[D3DRS_POINTSIZE]),
+                asfloat(rs[D3DRS_POINTSIZE_MIN]),
+                asfloat(rs[D3DRS_POINTSIZE_MAX]));
+    }
     rast.offset_units = asfloat(rs[D3DRS_DEPTHBIAS]) * asfloat(rs[NINED3DRS_ZBIASSCALE]);
     rast.offset_scale = asfloat(rs[D3DRS_SLOPESCALEDEPTHBIAS]);
  /* rast.offset_clamp = 0.0f; */
 
-    cso_set_rasterizer(ctx, &rast);
+    *rast_state = rast;
 }
 
 static INLINE void
@@ -137,7 +144,7 @@ nine_convert_blend_state_fixup(struct pipe_blend_state *blend, const DWORD *rs)
 }
 
 void
-nine_convert_blend_state(struct cso_context *ctx, const DWORD *rs)
+nine_convert_blend_state(struct pipe_blend_state *blend_state, const DWORD *rs)
 {
     struct pipe_blend_state blend;
 
@@ -181,7 +188,7 @@ nine_convert_blend_state(struct cso_context *ctx, const DWORD *rs)
 
     /* blend.force_srgb = !!rs[D3DRS_SRGBWRITEENABLE]; */
 
-    cso_set_blend(ctx, &blend);
+    *blend_state = blend;
 }
 
 void
@@ -239,8 +246,8 @@ nine_pipe_context_clear(struct NineDevice9 *This)
     cso_set_samplers(cso, PIPE_SHADER_VERTEX, 0, NULL);
     cso_set_samplers(cso, PIPE_SHADER_FRAGMENT, 0, NULL);
 
-    pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, 0, NULL);
-    pipe->set_sampler_views(pipe, PIPE_SHADER_VERTEX, 0, 0, NULL);
+    cso_set_sampler_views(cso, PIPE_SHADER_VERTEX, 0, NULL);
+    cso_set_sampler_views(cso, PIPE_SHADER_FRAGMENT, 0, NULL);
 
     pipe->set_vertex_buffers(pipe, 0, This->caps.MaxStreams, NULL);
     pipe->set_index_buffer(pipe, NULL);
