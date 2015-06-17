@@ -411,7 +411,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
    case ir_binop_gequal:
    case ir_binop_less:
    case ir_binop_greater:
-      assert(op0->type == op1->type);
+      assert(op0->type->is_subroutine() || op0->type == op1->type);
       this->type = glsl_type::get_instance(GLSL_TYPE_BOOL,
 					   op0->type->vector_elements, 1);
       break;
@@ -1853,12 +1853,16 @@ static void
 steal_memory(ir_instruction *ir, void *new_ctx)
 {
    ir_variable *var = ir->as_variable();
+   ir_function *fn = ir->as_function();
    ir_constant *constant = ir->as_constant();
    if (var != NULL && var->constant_value != NULL)
       steal_memory(var->constant_value, ir);
 
    if (var != NULL && var->constant_initializer != NULL)
       steal_memory(var->constant_initializer, ir);
+
+   if (fn != NULL && fn->subroutine_types)
+      ralloc_steal(new_ctx, fn->subroutine_types);
 
    /* The components of aggregate constants are not visited by the normal
     * visitor, so steal their values by hand.

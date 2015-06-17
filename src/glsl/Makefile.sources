@@ -155,6 +155,7 @@ LIBGLSL_FILES = \
 	lower_named_interface_blocks.cpp \
 	lower_packing_builtins.cpp \
 	lower_tess_level.cpp \
+	lower_subroutine.cpp \
 	lower_texture_projection.cpp \
 	lower_variable_index_to_cond_assign.cpp \
 	lower_vec_index_to_cond_assign.cpp \

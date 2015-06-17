@@ -304,6 +304,16 @@ private:
     * Is this function call actually a constructor?
     */
    bool cons;
+   ir_rvalue *
+   handle_method(exec_list *instructions,
+                 struct _mesa_glsl_parse_state *state);
+};
+
+class ast_subroutine_list : public ast_node
+{
+public:
+   virtual void print(void) const;
+   exec_list declarations;
 };
 
 class ast_array_specifier : public ast_node {
@@ -516,6 +526,9 @@ struct ast_type_qualifier {
          unsigned explicit_stream:1; /**< stream value assigned explicitly by shader code */
          /** \} */
 
+         /** \name Qualifiers for GL_ARB_shader_subroutine */
+         unsigned subroutine:1;  /**< Is this marked 'subroutine' */
+         unsigned subroutine_def:1; /**< Is this marked 'subroutine' with a list of types */
 	 /** \name Layout qualifiers for GL_ARB_tessellation_shader */
 	 /** \{ */
 	 /* tess eval input layout */
@@ -668,6 +681,7 @@ struct ast_type_qualifier {
                            ast_type_qualifier q,
                            ast_node* &node);
 
+   ast_subroutine_list *subroutine_list;
 };
 
 class ast_declarator_list;

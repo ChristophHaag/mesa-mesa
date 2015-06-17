@@ -489,6 +489,8 @@ struct _mesa_glsl_parse_state {
    bool ARB_shader_precision_warn;
    bool ARB_shader_stencil_export_enable;
    bool ARB_shader_stencil_export_warn;
+   bool ARB_shader_subroutine_enable;
+   bool ARB_shader_subroutine_warn;
    bool ARB_shader_texture_lod_enable;
    bool ARB_shader_texture_lod_warn;
    bool ARB_shading_language_420pack_enable;
@@ -580,6 +582,25 @@ struct _mesa_glsl_parse_state {
    unsigned atomic_counter_offsets[MAX_COMBINED_ATOMIC_BUFFERS];
 
    bool allow_extension_directive_midshader;
+
+   /**
+    * Known subroutine type declarations.
+    */
+   int num_subroutine_types;
+   ir_function **subroutine_types;
+
+   /**
+    * Functions that are associated with
+    * subroutine types.
+    */
+   int num_subroutines;
+   ir_function **subroutines;
+
+   /**
+    * field selection temporary parser storage -
+    * did the parser just parse a dot.
+    */
+   bool is_field;
 };
 
 # define YYLLOC_DEFAULT(Current, Rhs, N)			\

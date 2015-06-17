@@ -805,6 +805,10 @@ descriptor=[
   [ "MAX_FRAGMENT_INTERPOLATION_OFFSET", "CONTEXT_FLOAT(Const.MaxFragmentInterpolationOffset), extra_ARB_gpu_shader5" ],
   [ "FRAGMENT_INTERPOLATION_OFFSET_BITS", "CONST(FRAGMENT_INTERPOLATION_OFFSET_BITS), extra_ARB_gpu_shader5" ],
 
+# GL_ARB_shader_subroutine
+  [ "MAX_SUBROUTINES", "CONST(MAX_SUBROUTINES), extra_ARB_shader_subroutine" ],
+  [ "MAX_SUBROUTINE_UNIFORM_LOCATIONS", "CONST(MAX_SUBROUTINE_UNIFORM_LOCATIONS), extra_ARB_shader_subroutine" ],
+
 # GL_ARB_framebuffer_no_attachments
   ["MAX_FRAMEBUFFER_WIDTH", "CONTEXT_INT(Const.MaxFramebufferWidth), extra_ARB_framebuffer_no_attachments"],
   ["MAX_FRAMEBUFFER_HEIGHT", "CONTEXT_INT(Const.MaxFramebufferHeight), extra_ARB_framebuffer_no_attachments"],

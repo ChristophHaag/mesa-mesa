@@ -896,6 +896,10 @@ cross_validate_globals(struct gl_shader_program *prog,
 	 if (uniforms_only && (var->data.mode != ir_var_uniform))
 	    continue;
 
+         /* don't cross validate subroutine uniforms */
+         if (var->type->contains_subroutine())
+            continue;
+
 	 /* Don't cross validate temporaries that are at global scope.  These
 	  * will eventually get pulled into the shaders 'main'.
 	  */
@@ -2145,8 +2149,11 @@ update_array_sizes(struct gl_shader_program *prog)
           * Atomic counters are supposed to get deterministic
           * locations assigned based on the declaration ordering and
           * sizes, array compaction would mess that up.
+          *
+          * Subroutine uniforms are not removed.
 	  */
-	 if (var->is_in_uniform_block() || var->type->contains_atomic())
+	 if (var->is_in_uniform_block() || var->type->contains_atomic() ||
+	     var->type->contains_subroutine())
 	    continue;
 
 	 unsigned int size = var->data.max_array_access;
@@ -2737,6 +2744,23 @@ check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
    }
 }
 
+static void
+check_subroutine_resources(struct gl_context *ctx, struct gl_shader_program *prog)
+{
+
+   if (!ctx->Extensions.ARB_shader_subroutine)
+      return;
+
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_shader *sh = prog->_LinkedShaders[i];
+
+      if (sh) {
+         if (sh->NumSubroutineUniforms > MAX_SUBROUTINE_UNIFORM_LOCATIONS)
+            linker_error(prog, "Too many %s shader subroutine uniforms\n",
+                         _mesa_shader_stage_to_string(i));
+      }
+   }
+}
 /**
  * Validate shader image resources.
  */
@@ -3084,13 +3108,76 @@ build_program_resource_list(struct gl_context *ctx,
          return;
    }
 
+   for (unsigned i = 0; i < shProg->NumUniformStorage; i++) {
+      GLenum type;
+      if (!shProg->UniformStorage[i].hidden)
+         continue;
+
+      for (int j = MESA_SHADER_VERTEX; j < MESA_SHADER_STAGES; j++) {
+         if (!shProg->UniformStorage[i].subroutine[j].active)
+            continue;
+
+         type = _mesa_shader_stage_to_subroutine_uniform((gl_shader_stage)j);
+         /* add shader subroutines */
+         if (!add_program_resource(shProg, type, &shProg->UniformStorage[i], 0))
+            return;
+      }
+   }
+
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_shader *sh = shProg->_LinkedShaders[i];
+      GLuint type;
+
+      if (!sh)
+         continue;
+
+      type = _mesa_shader_stage_to_subroutine((gl_shader_stage)i);
+      for (unsigned j = 0; j < sh->NumSubroutineFunctions; j++) {
+      if (!add_program_resource(shProg, type, &sh->SubroutineFunctions[j], 0))
+            return;
+      }
+   }
+
    /* TODO - following extensions will require more resource types:
     *
     *    GL_ARB_shader_storage_buffer_object
-    *    GL_ARB_shader_subroutine
     */
 }
 
+void
+link_assign_subroutine_types(struct gl_context *ctx,
+                             struct gl_shader_program *prog)
+{
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      gl_shader *sh = prog->_LinkedShaders[i];
+
+      if (sh == NULL)
+         continue;
+
+      foreach_in_list(ir_instruction, node, sh->ir) {
+         ir_function *fn = node->as_function();
+         if (!fn)
+            continue;
+
+         if (fn->is_subroutine)
+            sh->NumSubroutineUniformTypes++;
+         if (!fn->is_subroutine_def)
+            continue;
+
+         sh->SubroutineFunctions = reralloc(sh, sh->SubroutineFunctions,
+                                            struct gl_subroutine_function,
+                                            sh->NumSubroutineFunctions + 1);
+         sh->SubroutineFunctions[sh->NumSubroutineFunctions].name = ralloc_strdup(sh, fn->name);
+         sh->SubroutineFunctions[sh->NumSubroutineFunctions].num_compat_types = fn->num_subroutine_types;
+         sh->SubroutineFunctions[sh->NumSubroutineFunctions].types =
+            ralloc_array(sh, const struct glsl_type *,
+                         fn->num_subroutine_types);
+         for (int j = 0; j < fn->num_subroutine_types; j++)
+            sh->SubroutineFunctions[sh->NumSubroutineFunctions].types[j] = fn->subroutine_types[j];
+         sh->NumSubroutineFunctions++;
+      }
+   }
+}
 
 void
 link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
@@ -3280,6 +3367,8 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    }
 
    check_explicit_uniform_locations(ctx, prog);
+   link_assign_subroutine_types(ctx, prog);
+
    if (!prog->LinkStatus)
       goto done;
 
@@ -3532,6 +3621,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    store_fragdepth_layout(prog);
 
    check_resources(ctx, prog);
+   check_subroutine_resources(ctx, prog);
    check_image_resources(ctx, prog);
    link_check_atomic_counter_resources(ctx, prog);
 

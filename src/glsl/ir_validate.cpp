@@ -494,9 +494,11 @@ ir_validate::visit_leave(ir_expression *ir)
        * vector type of the same size.
        */
       assert(ir->type->base_type == GLSL_TYPE_BOOL);
-      assert(ir->operands[0]->type == ir->operands[1]->type);
+      assert(ir->operands[0]->type->is_subroutine()
+	     || ir->operands[0]->type == ir->operands[1]->type);
       assert(ir->operands[0]->type->is_vector()
-	     || ir->operands[0]->type->is_scalar());
+	     || ir->operands[0]->type->is_scalar()
+	     || ir->operands[0]->type->is_subroutine());
       assert(ir->operands[0]->type->vector_elements
 	     == ir->type->vector_elements);
       break;

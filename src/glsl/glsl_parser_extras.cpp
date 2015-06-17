@@ -173,6 +173,10 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->all_invariant = false;
    this->user_structures = NULL;
    this->num_user_structures = 0;
+   this->num_subroutines = 0;
+   this->subroutines = NULL;
+   this->num_subroutine_types = 0;
+   this->subroutine_types = NULL;
 
    /* supported_versions should be large enough to support the known desktop
     * GLSL versions plus 3 GLES versions (ES 1.00, ES 3.00, and ES 3.10))
@@ -597,6 +601,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_shader_image_load_store,    true,  false,     ARB_shader_image_load_store),
    EXT(ARB_shader_precision,           true,  false,     ARB_shader_precision),
    EXT(ARB_shader_stencil_export,      true,  false,     ARB_shader_stencil_export),
+   EXT(ARB_shader_subroutine,          true,  false,     ARB_shader_subroutine),
    EXT(ARB_shader_texture_lod,         true,  false,     ARB_shader_texture_lod),
    EXT(ARB_shading_language_420pack,   true,  false,     ARB_shading_language_420pack),
    EXT(ARB_shading_language_packing,   true,  false,     ARB_shading_language_packing),
@@ -853,6 +858,15 @@ _mesa_ast_set_aggregate_type(const glsl_type *type,
 void
 _mesa_ast_type_qualifier_print(const struct ast_type_qualifier *q)
 {
+   if (q->flags.q.subroutine)
+      printf("subroutine ");
+
+   if (q->flags.q.subroutine_def) {
+      printf("subroutine (");
+      q->subroutine_list->print();
+      printf(")");
+   }
+
    if (q->flags.q.constant)
       printf("const ");
 
@@ -1443,6 +1457,15 @@ ast_struct_specifier::ast_struct_specifier(const char *identifier,
    is_declaration = true;
 }
 
+void ast_subroutine_list::print(void) const
+{
+   foreach_list_typed (ast_node, ast, link, & this->declarations) {
+      if (&ast->link != this->declarations.get_head())
+         printf(", ");
+      ast->print();
+   }
+}
+
 static void
 set_shader_inout_layout(struct gl_shader *shader,
 		     struct _mesa_glsl_parse_state *state)
@@ -1591,6 +1614,7 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
       struct gl_shader_compiler_options *options =
          &ctx->Const.ShaderCompilerOptions[shader->Stage];
 
+      lower_subroutine(shader->ir, state);
       /* Do some optimization at compile time to reduce shader IR size
        * and reduce later work if the same shader is linked multiple times
        */

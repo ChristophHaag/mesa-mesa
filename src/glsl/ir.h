@@ -1122,6 +1122,22 @@ public:
     * List of ir_function_signature for each overloaded function with this name.
     */
    struct exec_list signatures;
+
+   /**
+    * is this function a subroutine type declaration
+    * e.g. subroutine void type1(float arg1);
+    */
+   bool is_subroutine;
+
+   /**
+    * is this function associated to a subroutine type
+    * e.g. subroutine (type1, type2) function_name { function_body };
+    * would have this flag set and num_subroutine_types 2,
+    * and pointers to the type1 and type2 types.
+    */
+   bool is_subroutine_def;
+   int num_subroutine_types;
+   const struct glsl_type **subroutine_types;
 };
 
 inline const char *ir_function_signature::function_name() const
@@ -1692,7 +1708,18 @@ public:
    ir_call(ir_function_signature *callee,
 	   ir_dereference_variable *return_deref,
 	   exec_list *actual_parameters)
-      : ir_instruction(ir_type_call), return_deref(return_deref), callee(callee)
+      : ir_instruction(ir_type_call), return_deref(return_deref), callee(callee), sub_var(NULL), array_idx(NULL)
+   {
+      assert(callee->return_type != NULL);
+      actual_parameters->move_nodes_to(& this->actual_parameters);
+      this->use_builtin = callee->is_builtin();
+   }
+
+   ir_call(ir_function_signature *callee,
+	   ir_dereference_variable *return_deref,
+	   exec_list *actual_parameters,
+	   ir_variable *var, ir_rvalue *array_idx)
+      : ir_instruction(ir_type_call), return_deref(return_deref), callee(callee), sub_var(var), array_idx(array_idx)
    {
       assert(callee->return_type != NULL);
       actual_parameters->move_nodes_to(& this->actual_parameters);
@@ -1740,6 +1767,14 @@ public:
 
    /** Should this call only bind to a built-in function? */
    bool use_builtin;
+
+   /*
+    * ARB_shader_subroutine support -
+    * the subroutine uniform variable and array index
+    * rvalue to be used in the lowering pass later.
+    */
+   ir_variable *sub_var;
+   ir_rvalue *array_idx;
 };
 
 
