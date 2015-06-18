@@ -139,7 +139,8 @@ brw_lower_packing_builtins(struct brw_context *brw,
 }
 
 static void
-process_glsl_ir(struct brw_context *brw,
+process_glsl_ir(gl_shader_stage stage,
+                struct brw_context *brw,
                 struct gl_shader_program *shader_prog,
                 struct gl_shader *shader)
 {
@@ -185,7 +186,8 @@ process_glsl_ir(struct brw_context *brw,
    lower_quadop_vector(shader->ir, false);
 
    bool lowered_variable_indexing =
-      lower_variable_index_to_cond_assign(shader->ir,
+      lower_variable_index_to_cond_assign((gl_shader_stage)stage,
+                                          shader->ir,
                                           options->EmitNoIndirectInput,
                                           options->EmitNoIndirectOutput,
                                           options->EmitNoIndirectTemp,
@@ -218,7 +220,7 @@ process_glsl_ir(struct brw_context *brw,
    } while (progress);
 
    if (options->NirOptions != NULL)
-      lower_output_reads(shader->ir);
+      lower_output_reads(stage, shader->ir);
 
    validate_ir_tree(shader->ir);
 
@@ -262,7 +264,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
       _mesa_copy_linked_program_data((gl_shader_stage) stage, shProg, prog);
 
-      process_glsl_ir(brw, shProg, shader);
+      process_glsl_ir((gl_shader_stage) stage, brw, shProg, shader);
 
       /* Make a pass over the IR to add state references for any built-in
        * uniforms that are used.  This has to be done now (during linking).

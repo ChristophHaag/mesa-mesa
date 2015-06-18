@@ -165,6 +165,14 @@ void st_init_limits(struct pipe_screen *screen,
          pc = &c->Program[MESA_SHADER_GEOMETRY];
          options = &c->ShaderCompilerOptions[MESA_SHADER_GEOMETRY];
          break;
+      case PIPE_SHADER_TESS_CTRL:
+         pc = &c->Program[MESA_SHADER_TESS_CTRL];
+         options = &c->ShaderCompilerOptions[MESA_SHADER_TESS_CTRL];
+         break;
+      case PIPE_SHADER_TESS_EVAL:
+         pc = &c->Program[MESA_SHADER_TESS_EVAL];
+         options = &c->ShaderCompilerOptions[MESA_SHADER_TESS_EVAL];
+         break;
       default:
          /* compute shader, etc. */
          continue;
@@ -243,10 +251,13 @@ void st_init_limits(struct pipe_screen *screen,
          options->MaxUnrollIterations = MIN2(screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_INSTRUCTIONS), 65536);
 
       options->LowerClipDistance = true;
+      options->LowerTessLevel = true;
    }
 
    c->MaxCombinedTextureImageUnits =
          _min(c->Program[MESA_SHADER_VERTEX].MaxTextureImageUnits +
+              c->Program[MESA_SHADER_TESS_CTRL].MaxTextureImageUnits +
+              c->Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits +
               c->Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits +
               c->Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits,
               MAX_COMBINED_TEXTURE_IMAGE_UNITS);
@@ -266,6 +277,9 @@ void st_init_limits(struct pipe_screen *screen,
    c->MaxVarying = MIN2(c->MaxVarying, MAX_VARYING);
    c->MaxGeometryOutputVertices = screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES);
    c->MaxGeometryTotalOutputComponents = screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS);
+   c->MaxTessPatchComponents =
+      MAX2(screen->get_param(screen, PIPE_CAP_MAX_SHADER_PATCH_VARYINGS),
+           MAX_VARYING) * 4;
 
    c->MinProgramTexelOffset = screen->get_param(screen, PIPE_CAP_MIN_TEXEL_OFFSET);
    c->MaxProgramTexelOffset = screen->get_param(screen, PIPE_CAP_MAX_TEXEL_OFFSET);
@@ -301,6 +315,8 @@ void st_init_limits(struct pipe_screen *screen,
          screen->get_param(screen, PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT);
       c->MaxCombinedUniformBlocks = c->MaxUniformBufferBindings =
          c->Program[MESA_SHADER_VERTEX].MaxUniformBlocks +
+         c->Program[MESA_SHADER_TESS_CTRL].MaxUniformBlocks +
+         c->Program[MESA_SHADER_TESS_EVAL].MaxUniformBlocks +
          c->Program[MESA_SHADER_GEOMETRY].MaxUniformBlocks +
          c->Program[MESA_SHADER_FRAGMENT].MaxUniformBlocks;
       assert(c->MaxCombinedUniformBlocks <= MAX_COMBINED_UNIFORM_BUFFERS);
@@ -728,6 +744,11 @@ void st_init_extensions(struct pipe_screen *screen,
 #if 0 /* XXX re-enable when GLSL compiler again supports geometry shaders */
       extensions->ARB_geometry_shader4 = GL_TRUE;
 #endif
+   }
+
+   if (screen->get_shader_param(screen, PIPE_SHADER_TESS_CTRL,
+                                PIPE_SHADER_CAP_MAX_INSTRUCTIONS) > 0) {
+      extensions->ARB_tessellation_shader = GL_TRUE;
    }
 
    if (screen->get_param(screen, PIPE_CAP_PRIMITIVE_RESTART)) {

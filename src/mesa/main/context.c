@@ -496,6 +496,8 @@ init_program_limits(struct gl_constants *consts, gl_shader_stage stage,
       prog->MaxInputComponents = 16 * 4; /* old limit not to break tnl and swrast */
       prog->MaxOutputComponents = 0; /* value not used */
       break;
+   case MESA_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_EVAL:
    case MESA_SHADER_GEOMETRY:
       prog->MaxParameters = MAX_VERTEX_PROGRAM_PARAMS;
       prog->MaxAttribs = MAX_VERTEX_GENERIC_ATTRIBS;
@@ -724,6 +726,14 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
 
    /** GL_KHR_context_flush_control */
    consts->ContextReleaseBehavior = GL_CONTEXT_RELEASE_BEHAVIOR_FLUSH;
+
+   /** GL_ARB_tessellation_shader */
+   consts->MaxTessGenLevel = MAX_TESS_GEN_LEVEL;
+   consts->MaxPatchVertices = MAX_PATCH_VERTICES;
+   consts->Program[MESA_SHADER_TESS_CTRL].MaxTextureImageUnits = MAX_TEXTURE_IMAGE_UNITS;
+   consts->Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits = MAX_TEXTURE_IMAGE_UNITS;
+   consts->MaxTessPatchComponents = MAX_TESS_PATCH_COMPONENTS;
+   consts->MaxTessControlTotalOutputComponents = MAX_TESS_CONTROL_TOTAL_OUTPUT_COMPONENTS;
 }
 
 
@@ -1331,6 +1341,8 @@ _mesa_free_context_data( struct gl_context *ctx )
    _mesa_reference_vertprog(ctx, &ctx->VertexProgram._Current, NULL);
    _mesa_reference_vertprog(ctx, &ctx->VertexProgram._TnlProgram, NULL);
 
+   _mesa_reference_tesscprog(ctx, &ctx->TessCtrlProgram._Current, NULL);
+   _mesa_reference_tesseprog(ctx, &ctx->TessEvalProgram._Current, NULL);
    _mesa_reference_geomprog(ctx, &ctx->GeometryProgram._Current, NULL);
 
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram.Current, NULL);

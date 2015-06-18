@@ -154,13 +154,21 @@ void si_begin_new_cs(struct si_context *ctx)
 	r600_postflush_resume_features(&ctx->b);
 
 	ctx->b.initial_gfx_cs_size = ctx->b.rings.gfx.cs->cdw;
+
+	/* Invalidate various draw states so that they are emitted before
+	 * the first draw call. */
 	si_invalidate_draw_sh_constants(ctx);
 	ctx->last_primitive_restart_en = -1;
 	ctx->last_restart_index = SI_RESTART_INDEX_UNKNOWN;
 	ctx->last_gs_out_prim = -1;
 	ctx->last_prim = -1;
 	ctx->last_multi_vgt_param = -1;
+	ctx->last_ls_hs_config = -1;
 	ctx->last_rast_prim = -1;
 	ctx->last_sc_line_stipple = ~0;
 	ctx->emit_scratch_reloc = true;
+	ctx->last_ls = NULL;
+	ctx->last_tcs = NULL;
+	ctx->last_tes_sh_base = -1;
+	ctx->last_num_tcs_input_cp = -1;
 }

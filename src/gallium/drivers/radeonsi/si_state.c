@@ -2845,6 +2845,30 @@ static void si_set_polygon_stipple(struct pipe_context *ctx,
 	}
 }
 
+static void si_set_tess_state(struct pipe_context *ctx,
+			      const float default_outer_level[4],
+			      const float default_inner_level[2])
+{
+	struct si_context *sctx = (struct si_context *)ctx;
+	struct pipe_constant_buffer cb;
+	float array[8];
+
+	memcpy(array, default_outer_level, sizeof(float) * 4);
+	memcpy(array+4, default_inner_level, sizeof(float) * 2);
+
+	cb.buffer = NULL;
+	cb.user_buffer = NULL;
+	cb.buffer_size = sizeof(array);
+
+	si_upload_const_buffer(sctx, (struct r600_resource**)&cb.buffer,
+			       (void*)array, sizeof(array),
+			       &cb.buffer_offset);
+
+	ctx->set_constant_buffer(ctx, PIPE_SHADER_TESS_CTRL,
+				 SI_DRIVER_STATE_CONST_BUF, &cb);
+	pipe_resource_reference(&cb.buffer, NULL);
+}
+
 static void si_texture_barrier(struct pipe_context *ctx)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
@@ -2920,6 +2944,7 @@ void si_init_state_functions(struct si_context *sctx)
 	sctx->b.b.texture_barrier = si_texture_barrier;
 	sctx->b.b.set_polygon_stipple = si_set_polygon_stipple;
 	sctx->b.b.set_min_samples = si_set_min_samples;
+	sctx->b.b.set_tess_state = si_set_tess_state;
 
 	sctx->b.set_occlusion_query_state = si_set_occlusion_query_state;
 	sctx->b.need_gfx_cs_space = si_need_gfx_cs_space;
@@ -3046,8 +3071,8 @@ void si_init_config(struct si_context *sctx)
 
 	si_cmd_context_control(pm4);
 
-	si_pm4_set_reg(pm4, R_028A18_VGT_HOS_MAX_TESS_LEVEL, 0x0);
-	si_pm4_set_reg(pm4, R_028A1C_VGT_HOS_MIN_TESS_LEVEL, 0x0);
+	si_pm4_set_reg(pm4, R_028A18_VGT_HOS_MAX_TESS_LEVEL, fui(64));
+	si_pm4_set_reg(pm4, R_028A1C_VGT_HOS_MIN_TESS_LEVEL, fui(0));
 
 	/* FIXME calculate these values somehow ??? */
 	si_pm4_set_reg(pm4, R_028A54_VGT_GS_PER_ES, 0x80);
@@ -3173,6 +3198,10 @@ void si_init_config(struct si_context *sctx)
 	si_pm4_set_reg(pm4, R_028408_VGT_INDX_OFFSET, 0);
 
 	if (sctx->b.chip_class >= CIK) {
+		si_pm4_set_reg(pm4, R_00B51C_SPI_SHADER_PGM_RSRC3_LS, S_00B51C_CU_EN(0xfffc));
+		si_pm4_set_reg(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS, 0);
+		si_pm4_set_reg(pm4, R_00B31C_SPI_SHADER_PGM_RSRC3_ES, S_00B31C_CU_EN(0xfffe));
+		si_pm4_set_reg(pm4, R_00B21C_SPI_SHADER_PGM_RSRC3_GS, S_00B21C_CU_EN(0xffff));
 		si_pm4_set_reg(pm4, R_00B118_SPI_SHADER_PGM_RSRC3_VS, S_00B118_CU_EN(0xffff));
 		si_pm4_set_reg(pm4, R_00B11C_SPI_SHADER_LATE_ALLOC_VS, S_00B11C_LIMIT(0));
 		si_pm4_set_reg(pm4, R_00B01C_SPI_SHADER_PGM_RSRC3_PS, S_00B01C_CU_EN(0xffff));

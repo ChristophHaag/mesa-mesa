@@ -113,12 +113,18 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->Const.MaxGeometryUniformComponents = ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxUniformComponents;
 
    this->Const.MaxVertexAtomicCounters = ctx->Const.Program[MESA_SHADER_VERTEX].MaxAtomicCounters;
+   this->Const.MaxTessControlAtomicCounters = ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxAtomicCounters;
+   this->Const.MaxTessEvaluationAtomicCounters = ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxAtomicCounters;
    this->Const.MaxGeometryAtomicCounters = ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxAtomicCounters;
    this->Const.MaxFragmentAtomicCounters = ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAtomicCounters;
    this->Const.MaxCombinedAtomicCounters = ctx->Const.MaxCombinedAtomicCounters;
    this->Const.MaxAtomicBufferBindings = ctx->Const.MaxAtomicBufferBindings;
    this->Const.MaxVertexAtomicCounterBuffers =
       ctx->Const.Program[MESA_SHADER_VERTEX].MaxAtomicBuffers;
+   this->Const.MaxTessControlAtomicCounterBuffers =
+      ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxAtomicBuffers;
+   this->Const.MaxTessEvaluationAtomicCounterBuffers =
+      ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxAtomicBuffers;
    this->Const.MaxGeometryAtomicCounterBuffers =
       ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxAtomicBuffers;
    this->Const.MaxFragmentAtomicCounterBuffers =
@@ -138,12 +144,28 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->Const.MaxCombinedImageUnitsAndFragmentOutputs = ctx->Const.MaxCombinedImageUnitsAndFragmentOutputs;
    this->Const.MaxImageSamples = ctx->Const.MaxImageSamples;
    this->Const.MaxVertexImageUniforms = ctx->Const.Program[MESA_SHADER_VERTEX].MaxImageUniforms;
+   this->Const.MaxTessControlImageUniforms = ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxImageUniforms;
+   this->Const.MaxTessEvaluationImageUniforms = ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxImageUniforms;
    this->Const.MaxGeometryImageUniforms = ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxImageUniforms;
    this->Const.MaxFragmentImageUniforms = ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxImageUniforms;
    this->Const.MaxCombinedImageUniforms = ctx->Const.MaxCombinedImageUniforms;
 
    /* ARB_viewport_array */
    this->Const.MaxViewports = ctx->Const.MaxViewports;
+
+   /* tessellation shader constants */
+   this->Const.MaxPatchVertices = ctx->Const.MaxPatchVertices;
+   this->Const.MaxTessGenLevel = ctx->Const.MaxTessGenLevel;
+   this->Const.MaxTessControlInputComponents = ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxInputComponents;
+   this->Const.MaxTessControlOutputComponents = ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxOutputComponents;
+   this->Const.MaxTessControlTextureImageUnits = ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxTextureImageUnits;
+   this->Const.MaxTessEvaluationInputComponents = ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxInputComponents;
+   this->Const.MaxTessEvaluationOutputComponents = ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxOutputComponents;
+   this->Const.MaxTessEvaluationTextureImageUnits = ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits;
+   this->Const.MaxTessPatchComponents = ctx->Const.MaxTessPatchComponents;
+   this->Const.MaxTessControlTotalOutputComponents = ctx->Const.MaxTessControlTotalOutputComponents;
+   this->Const.MaxTessControlUniformComponents = ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxUniformComponents;
+   this->Const.MaxTessEvaluationUniformComponents = ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxUniformComponents;
 
    this->current_function = NULL;
    this->toplevel_ir = NULL;
@@ -224,6 +246,7 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->fs_redeclares_gl_fragcoord_with_no_layout_qualifiers = false;
 
    this->gs_input_prim_type_specified = false;
+   this->tcs_output_vertices_specified = false;
    this->gs_input_size = 0;
    this->in_qualifier = new(this) ast_type_qualifier();
    this->out_qualifier = new(this) ast_type_qualifier();
@@ -389,6 +412,8 @@ _mesa_shader_stage_to_string(unsigned stage)
    case MESA_SHADER_FRAGMENT: return "fragment";
    case MESA_SHADER_GEOMETRY: return "geometry";
    case MESA_SHADER_COMPUTE:  return "compute";
+   case MESA_SHADER_TESS_CTRL: return "tess ctrl";
+   case MESA_SHADER_TESS_EVAL: return "tess eval";
    }
 
    unreachable("Unknown shader stage.");
@@ -406,6 +431,8 @@ _mesa_shader_stage_to_abbrev(unsigned stage)
    case MESA_SHADER_FRAGMENT: return "FS";
    case MESA_SHADER_GEOMETRY: return "GS";
    case MESA_SHADER_COMPUTE:  return "CS";
+   case MESA_SHADER_TESS_CTRL: return "TCS";
+   case MESA_SHADER_TESS_EVAL: return "TES";
    }
 
    unreachable("Unknown shader stage.");
@@ -573,6 +600,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_shader_texture_lod,         true,  false,     ARB_shader_texture_lod),
    EXT(ARB_shading_language_420pack,   true,  false,     ARB_shading_language_420pack),
    EXT(ARB_shading_language_packing,   true,  false,     ARB_shading_language_packing),
+   EXT(ARB_tessellation_shader,        true,  false,     ARB_tessellation_shader),
    EXT(ARB_texture_cube_map_array,     true,  false,     ARB_texture_cube_map_array),
    EXT(ARB_texture_gather,             true,  false,     ARB_texture_gather),
    EXT(ARB_texture_multisample,        true,  false,     ARB_texture_multisample),
@@ -851,6 +879,8 @@ _mesa_ast_type_qualifier_print(const struct ast_type_qualifier *q)
       printf("centroid ");
    if (q->flags.q.sample)
       printf("sample ");
+   if (q->flags.q.patch)
+      printf("patch ");
    if (q->flags.q.uniform)
       printf("uniform ");
    if (q->flags.q.smooth)
@@ -1417,8 +1447,12 @@ static void
 set_shader_inout_layout(struct gl_shader *shader,
 		     struct _mesa_glsl_parse_state *state)
 {
-   if (shader->Stage != MESA_SHADER_GEOMETRY) {
-      /* Should have been prevented by the parser. */
+   /* Should have been prevented by the parser. */
+   if (shader->Stage == MESA_SHADER_TESS_CTRL) {
+      assert(!state->in_qualifier->flags.i);
+   } else if (shader->Stage == MESA_SHADER_TESS_EVAL) {
+      assert(!state->out_qualifier->flags.i);
+   } else if (shader->Stage != MESA_SHADER_GEOMETRY) {
       assert(!state->in_qualifier->flags.i);
       assert(!state->out_qualifier->flags.i);
    }
@@ -1438,6 +1472,28 @@ set_shader_inout_layout(struct gl_shader *shader,
    }
 
    switch (shader->Stage) {
+   case MESA_SHADER_TESS_CTRL:
+      shader->TessCtrl.VerticesOut = 0;
+      if (state->tcs_output_vertices_specified)
+         shader->TessCtrl.VerticesOut = state->out_qualifier->vertices;
+      break;
+   case MESA_SHADER_TESS_EVAL:
+      shader->TessEval.PrimitiveMode = PRIM_UNKNOWN;
+      if (state->in_qualifier->flags.q.prim_type)
+         shader->TessEval.PrimitiveMode = state->in_qualifier->prim_type;
+
+      shader->TessEval.Spacing = 0;
+      if (state->in_qualifier->flags.q.vertex_spacing)
+         shader->TessEval.Spacing = state->in_qualifier->vertex_spacing;
+
+      shader->TessEval.VertexOrder = 0;
+      if (state->in_qualifier->flags.q.ordering)
+         shader->TessEval.VertexOrder = state->in_qualifier->ordering;
+
+      shader->TessEval.PointMode = -1;
+      if (state->in_qualifier->flags.q.point_mode)
+         shader->TessEval.PointMode = state->in_qualifier->point_mode;
+      break;
    case MESA_SHADER_GEOMETRY:
       shader->Geom.VerticesOut = 0;
       if (state->out_qualifier->flags.q.max_vertices)

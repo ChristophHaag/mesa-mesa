@@ -136,8 +136,9 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
 %token ATTRIBUTE CONST_TOK BOOL_TOK FLOAT_TOK INT_TOK UINT_TOK DOUBLE_TOK
 %token BREAK CONTINUE DO ELSE FOR IF DISCARD RETURN SWITCH CASE DEFAULT
 %token BVEC2 BVEC3 BVEC4 IVEC2 IVEC3 IVEC4 UVEC2 UVEC3 UVEC4 VEC2 VEC3 VEC4 DVEC2 DVEC3 DVEC4
-%token CENTROID IN_TOK OUT_TOK INOUT_TOK UNIFORM VARYING SAMPLE
+%token CENTROID IN_TOK OUT_TOK INOUT_TOK UNIFORM VARYING PATCH SAMPLE
 %token NOPERSPECTIVE FLAT SMOOTH
+%token ROW_MAJOR PACKED_TOK
 %token MAT2X2 MAT2X3 MAT2X4
 %token MAT3X2 MAT3X3 MAT3X4
 %token MAT4X2 MAT4X3 MAT4X4
@@ -189,18 +190,18 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
 
    /* Reserved words that are not actually used in the grammar.
     */
-%token ASM CLASS UNION ENUM TYPEDEF TEMPLATE THIS PACKED_TOK GOTO
+%token ASM CLASS UNION ENUM TYPEDEF TEMPLATE THIS GOTO
 %token INLINE_TOK NOINLINE PUBLIC_TOK STATIC EXTERN EXTERNAL
 %token LONG_TOK SHORT_TOK HALF FIXED_TOK UNSIGNED INPUT_TOK
 %token HVEC2 HVEC3 HVEC4 FVEC2 FVEC3 FVEC4
 %token SAMPLER3DRECT
 %token SIZEOF CAST NAMESPACE USING
-%token RESOURCE PATCH
+%token RESOURCE
 %token SUBROUTINE
 
 %token ERROR_TOK
 
-%token COMMON PARTITION ACTIVE FILTER ROW_MAJOR
+%token COMMON PARTITION ACTIVE FILTER
 
 %type <identifier> variable_identifier
 %type <node> statement
@@ -1385,6 +1386,85 @@ layout_qualifier_id:
          }
       }
 
+      /* Layout qualifiers for tessellation evaluation shaders. */
+      if (!$$.flags.i) {
+         struct {
+            const char *s;
+            GLenum e;
+         } map[] = {
+                 /* triangles already parsed by gs-specific code */
+                 { "quads", GL_QUADS },
+                 { "isolines", GL_ISOLINES },
+         };
+         for (unsigned i = 0; i < ARRAY_SIZE(map); i++) {
+            if (match_layout_qualifier($1, map[i].s, state) == 0) {
+               $$.flags.q.prim_type = 1;
+               $$.prim_type = map[i].e;
+               break;
+            }
+         }
+
+         if (!state->ARB_tessellation_shader_enable &&
+             !state->is_version(400, 0)) {
+            _mesa_glsl_error(& @1, state,
+                             "primitive mode qualifier `%s' requires "
+                             "GLSL 4.00 or ARB_tessellation_shader", $1);
+         }
+      }
+      if (!$$.flags.i) {
+         struct {
+            const char *s;
+            GLenum e;
+         } map[] = {
+                 { "equal_spacing", GL_EQUAL },
+                 { "fractional_odd_spacing", GL_FRACTIONAL_ODD },
+                 { "fractional_even_spacing", GL_FRACTIONAL_EVEN },
+         };
+         for (unsigned i = 0; i < ARRAY_SIZE(map); i++) {
+            if (match_layout_qualifier($1, map[i].s, state) == 0) {
+               $$.flags.q.vertex_spacing = 1;
+               $$.vertex_spacing = map[i].e;
+               break;
+            }
+         }
+
+         if (!state->ARB_tessellation_shader_enable &&
+             !state->is_version(400, 0)) {
+            _mesa_glsl_error(& @1, state,
+                             "vertex spacing qualifier `%s' requires "
+                             "GLSL 4.00 or ARB_tessellation_shader", $1);
+         }
+      }
+      if (!$$.flags.i) {
+         if (match_layout_qualifier($1, "cw", state) == 0) {
+            $$.flags.q.ordering = 1;
+            $$.ordering = GL_CW;
+         } else if (match_layout_qualifier($1, "ccw", state) == 0) {
+            $$.flags.q.ordering = 1;
+            $$.ordering = GL_CCW;
+         }
+
+         if (!state->ARB_tessellation_shader_enable &&
+             !state->is_version(400, 0)) {
+            _mesa_glsl_error(& @1, state,
+                             "ordering qualifier `%s' requires "
+                             "GLSL 4.00 or ARB_tessellation_shader", $1);
+         }
+      }
+      if (!$$.flags.i) {
+         if (match_layout_qualifier($1, "point_mode", state) == 0) {
+            $$.flags.q.point_mode = 1;
+            $$.point_mode = true;
+         }
+
+         if (!state->ARB_tessellation_shader_enable &&
+             !state->is_version(400, 0)) {
+            _mesa_glsl_error(& @1, state,
+                             "qualifier `point_mode' requires "
+                             "GLSL 4.00 or ARB_tessellation_shader");
+         }
+      }
+
       if (!$$.flags.i) {
          _mesa_glsl_error(& @1, state, "unrecognized layout identifier "
                           "`%s'", $1);
@@ -1517,6 +1597,30 @@ layout_qualifier_id:
                _mesa_glsl_error(& @3, state,
                                 "GL_ARB_gpu_shader5 invocations "
                                 "qualifier specified", $3);
+            }
+         }
+      }
+
+      /* Layout qualifiers for tessellation control shaders. */
+      if (match_layout_qualifier("vertices", $1, state) == 0) {
+         $$.flags.q.vertices = 1;
+
+         if ($3 <= 0) {
+            _mesa_glsl_error(& @3, state,
+                             "invalid vertices (%d) specified", $3);
+            YYERROR;
+         } else if ($3 > (int)state->Const.MaxPatchVertices) {
+            _mesa_glsl_error(& @3, state,
+                             "vertices (%d) exceeds "
+                             "GL_MAX_PATCH_VERTICES", $3);
+            YYERROR;
+         } else {
+            $$.vertices = $3;
+            if (!state->ARB_tessellation_shader_enable &&
+                !state->is_version(400, 0)) {
+               _mesa_glsl_error(& @1, state,
+                                "vertices qualifier requires GLSL 4.00 or "
+                                "ARB_tessellation_shader");
             }
          }
       }
@@ -1758,7 +1862,11 @@ auxiliary_storage_qualifier:
       memset(& $$, 0, sizeof($$));
       $$.flags.q.sample = 1;
    }
-   /* TODO: "patch" also goes here someday. */
+   | PATCH
+   {
+      memset(& $$, 0, sizeof($$));
+      $$.flags.q.patch = 1;
+   }
 
 storage_qualifier:
    CONST_TOK
@@ -2720,11 +2828,8 @@ layout_defaults:
 
    | layout_qualifier OUT_TOK ';'
    {
-      if (state->stage != MESA_SHADER_GEOMETRY) {
-         _mesa_glsl_error(& @1, state,
-                          "out layout qualifiers only valid in "
-                          "geometry shaders");
-      } else {
+      $$ = NULL;
+      if (state->stage == MESA_SHADER_GEOMETRY) {
          if ($1.flags.q.prim_type) {
             /* Make sure this is a valid output primitive type. */
             switch ($1.prim_type) {
@@ -2743,6 +2848,12 @@ layout_defaults:
 
          /* Allow future assigments of global out's stream id value */
          state->out_qualifier->flags.q.explicit_stream = 0;
+      } else if (state->stage == MESA_SHADER_TESS_CTRL) {
+         if (!state->out_qualifier->merge_out_qualifier(& @1, state, $1, $$))
+            YYERROR;
+      } else {
+         _mesa_glsl_error(& @1, state,
+                          "out layout qualifiers only valid in "
+                          "tessellation control or geometry shaders");
       }
-      $$ = NULL;
    }

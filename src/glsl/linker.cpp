@@ -250,6 +250,144 @@ public:
    }
 };
 
+class tess_eval_array_resize_visitor : public ir_hierarchical_visitor {
+public:
+   unsigned num_vertices;
+   gl_shader_program *prog;
+
+   tess_eval_array_resize_visitor(unsigned num_vertices, gl_shader_program *prog)
+   {
+      this->num_vertices = num_vertices;
+      this->prog = prog;
+   }
+
+   virtual ~tess_eval_array_resize_visitor()
+   {
+      /* empty */
+   }
+
+   virtual ir_visitor_status visit(ir_variable *var)
+   {
+      if (!var->type->is_array() || var->data.mode != ir_var_shader_in || var->data.patch)
+         return visit_continue;
+
+      var->type = glsl_type::get_array_instance(var->type->fields.array,
+                                                this->num_vertices);
+      var->data.max_array_access = this->num_vertices - 1;
+
+      return visit_continue;
+   }
+
+   /* Dereferences of input variables need to be updated so that their type
+    * matches the newly assigned type of the variable they are accessing. */
+   virtual ir_visitor_status visit(ir_dereference_variable *ir)
+   {
+      ir->type = ir->var->type;
+      return visit_continue;
+   }
+
+   /* Dereferences of 2D input arrays need to be updated so that their type
+    * matches the newly assigned type of the array they are accessing. */
+   virtual ir_visitor_status visit_leave(ir_dereference_array *ir)
+   {
+      const glsl_type *const vt = ir->array->type;
+      if (vt->is_array())
+         ir->type = vt->fields.array;
+      return visit_continue;
+   }
+};
+
+class barrier_use_visitor : public ir_hierarchical_visitor {
+public:
+   barrier_use_visitor(gl_shader_program *prog)
+      : prog(prog), in_main(false), after_return(false), control_flow(0)
+   {
+   }
+
+   virtual ~barrier_use_visitor()
+   {
+      /* empty */
+   }
+
+   virtual ir_visitor_status visit_enter(ir_function *ir)
+   {
+      if (strcmp(ir->name, "main") == 0)
+         in_main = true;
+
+      return visit_continue;
+   }
+
+   virtual ir_visitor_status visit_leave(ir_function *ir)
+   {
+      in_main = false;
+      after_return = false;
+      return visit_continue;
+   }
+
+   virtual ir_visitor_status visit_leave(ir_return *ir)
+   {
+      after_return = true;
+      return visit_continue;
+   }
+
+   virtual ir_visitor_status visit_enter(ir_if *ir)
+   {
+      ++control_flow;
+      return visit_continue;
+   }
+
+   virtual ir_visitor_status visit_leave(ir_if *ir)
+   {
+      --control_flow;
+      return visit_continue;
+   }
+
+   virtual ir_visitor_status visit_enter(ir_loop *ir)
+   {
+      ++control_flow;
+      return visit_continue;
+   }
+
+   virtual ir_visitor_status visit_leave(ir_loop *ir)
+   {
+      --control_flow;
+      return visit_continue;
+   }
+
+   /* FINISHME: `switch` is not expressed at the IR level -- it's already
+    * been lowered to a mess of `if`s. We'll correctly disallow any use of
+    * barrier() in a conditional path within the switch, but not in a path
+    * which is always hit.
+    */
+
+   virtual ir_visitor_status visit_enter(ir_call *ir)
+   {
+      if (ir->use_builtin && strcmp(ir->callee_name(), "barrier") == 0) {
+         /* Use of barrier(); determine if it is legal: */
+         if (!in_main) {
+            linker_error(prog, "Builtin barrier() may only be used in main");
+            return visit_stop;
+         }
+
+         if (after_return) {
+            linker_error(prog, "Builtin barrier() may not be used after return");
+            return visit_stop;
+         }
+
+         if (control_flow != 0) {
+            linker_error(prog, "Builtin barrier() may not be used inside control flow");
+            return visit_stop;
+         }
+      }
+      return visit_continue;
+   }
+
+private:
+   gl_shader_program *prog;
+   bool in_main, after_return;
+   int control_flow;
+};
+
 /**
  * Visitor that determines the highest stream id to which a (geometry) shader
  * emits vertices. It also checks whether End{Stream}Primitive is ever called.
@@ -580,6 +718,17 @@ validate_vertex_shader_executable(struct gl_shader_program *prog,
 
    analyze_clip_usage(prog, shader, &prog->Vert.UsesClipDistance,
                       &prog->Vert.ClipDistanceArraySize);
+}
+
+void
+validate_tess_eval_shader_executable(struct gl_shader_program *prog,
+                                     struct gl_shader *shader)
+{
+   if (shader == NULL)
+      return;
+
+   analyze_clip_usage(prog, shader, &prog->TessEval.UsesClipDistance,
+                      &prog->TessEval.ClipDistanceArraySize);
 }
 
 
@@ -1350,6 +1499,167 @@ private:
    hash_table *unnamed_interfaces;
 };
 
+
+/**
+ * Performs the cross-validation of tessellation control shader vertices and
+ * layout qualifiers for the attached tessellation control shaders,
+ * and propagates them to the linked TCS and linked shader program.
+ */
+static void
+link_tcs_out_layout_qualifiers(struct gl_shader_program *prog,
+			      struct gl_shader *linked_shader,
+			      struct gl_shader **shader_list,
+			      unsigned num_shaders)
+{
+   linked_shader->TessCtrl.VerticesOut = 0;
+
+   if (linked_shader->Stage != MESA_SHADER_TESS_CTRL)
+      return;
+
+   /* From the GLSL 4.0 spec (chapter 4.3.8.2):
+    *
+    *     "All tessellation control shader layout declarations in a program
+    *      must specify the same output patch vertex count.  There must be at
+    *      least one layout qualifier specifying an output patch vertex count
+    *      in any program containing tessellation control shaders; however,
+    *      such a declaration is not required in all tessellation control
+    *      shaders."
+    */
+
+   for (unsigned i = 0; i < num_shaders; i++) {
+      struct gl_shader *shader = shader_list[i];
+
+      if (shader->TessCtrl.VerticesOut != 0) {
+	 if (linked_shader->TessCtrl.VerticesOut != 0 &&
+	     linked_shader->TessCtrl.VerticesOut != shader->TessCtrl.VerticesOut) {
+	    linker_error(prog, "tessellation control shader defined with "
+			 "conflicting output vertex count (%d and %d)\n",
+			 linked_shader->TessCtrl.VerticesOut,
+			 shader->TessCtrl.VerticesOut);
+	    return;
+	 }
+	 linked_shader->TessCtrl.VerticesOut = shader->TessCtrl.VerticesOut;
+      }
+   }
+
+   /* Just do the intrastage -> interstage propagation right now,
+    * since we already know we're in the right type of shader program
+    * for doing it.
+    */
+   if (linked_shader->TessCtrl.VerticesOut == 0) {
+      linker_error(prog, "tessellation control shader didn't declare "
+		   "vertices out layout qualifier\n");
+      return;
+   }
+   prog->TessCtrl.VerticesOut = linked_shader->TessCtrl.VerticesOut;
+}
+
+
+/**
+ * Performs the cross-validation of tessellation evaluation shader
+ * primitive type, vertex spacing, ordering and point_mode layout qualifiers
+ * for the attached tessellation evaluation shaders, and propagates them
+ * to the linked TES and linked shader program.
+ */
+static void
+link_tes_in_layout_qualifiers(struct gl_shader_program *prog,
+				struct gl_shader *linked_shader,
+				struct gl_shader **shader_list,
+				unsigned num_shaders)
+{
+   linked_shader->TessEval.PrimitiveMode = PRIM_UNKNOWN;
+   linked_shader->TessEval.Spacing = 0;
+   linked_shader->TessEval.VertexOrder = 0;
+   linked_shader->TessEval.PointMode = -1;
+
+   if (linked_shader->Stage != MESA_SHADER_TESS_EVAL)
+      return;
+
+   /* From the GLSL 4.0 spec (chapter 4.3.8.1):
+    *
+    *     "At least one tessellation evaluation shader (compilation unit) in
+    *      a program must declare a primitive mode in its input layout.
+    *      Declaration vertex spacing, ordering, and point mode identifiers is
+    *      optional.  It is not required that all tessellation evaluation
+    *      shaders in a program declare a primitive mode.  If spacing or
+    *      vertex ordering declarations are omitted, the tessellation
+    *      primitive generator will use equal spacing or counter-clockwise
+    *      vertex ordering, respectively.  If a point mode declaration is
+    *      omitted, the tessellation primitive generator will produce lines or
+    *      triangles according to the primitive mode."
+    */
+
+   for (unsigned i = 0; i < num_shaders; i++) {
+      struct gl_shader *shader = shader_list[i];
+
+      if (shader->TessEval.PrimitiveMode != PRIM_UNKNOWN) {
+	 if (linked_shader->TessEval.PrimitiveMode != PRIM_UNKNOWN &&
+	     linked_shader->TessEval.PrimitiveMode != shader->TessEval.PrimitiveMode) {
+	    linker_error(prog, "tessellation evaluation shader defined with "
+			 "conflicting input primitive modes.\n");
+	    return;
+	 }
+	 linked_shader->TessEval.PrimitiveMode = shader->TessEval.PrimitiveMode;
+      }
+
+      if (shader->TessEval.Spacing != 0) {
+	 if (linked_shader->TessEval.Spacing != 0 &&
+	     linked_shader->TessEval.Spacing != shader->TessEval.Spacing) {
+	    linker_error(prog, "tessellation evaluation shader defined with "
+			 "conflicting vertex spacing.\n");
+	    return;
+	 }
+	 linked_shader->TessEval.Spacing = shader->TessEval.Spacing;
+      }
+
+      if (shader->TessEval.VertexOrder != 0) {
+	 if (linked_shader->TessEval.VertexOrder != 0 &&
+	     linked_shader->TessEval.VertexOrder != shader->TessEval.VertexOrder) {
+	    linker_error(prog, "tessellation evaluation shader defined with "
+			 "conflicting ordering.\n");
+	    return;
+	 }
+	 linked_shader->TessEval.VertexOrder = shader->TessEval.VertexOrder;
+      }
+
+      if (shader->TessEval.PointMode != -1) {
+	 if (linked_shader->TessEval.PointMode != -1 &&
+	     linked_shader->TessEval.PointMode != shader->TessEval.PointMode) {
+	    linker_error(prog, "tessellation evaluation shader defined with "
+			 "conflicting point modes.\n");
+	    return;
+	 }
+	 linked_shader->TessEval.PointMode = shader->TessEval.PointMode;
+      }
+
+   }
+
+   /* Just do the intrastage -> interstage propagation right now,
+    * since we already know we're in the right type of shader program
+    * for doing it.
+    */
+   if (linked_shader->TessEval.PrimitiveMode == PRIM_UNKNOWN) {
+      linker_error(prog,
+		   "tessellation evaluation shader didn't declare input "
+		   "primitive modes.\n");
+      return;
+   }
+   prog->TessEval.PrimitiveMode = linked_shader->TessEval.PrimitiveMode;
+
+   if (linked_shader->TessEval.Spacing == 0)
+      linked_shader->TessEval.Spacing = GL_EQUAL;
+   prog->TessEval.Spacing = linked_shader->TessEval.Spacing;
+
+   if (linked_shader->TessEval.VertexOrder == 0)
+      linked_shader->TessEval.VertexOrder = GL_CCW;
+   prog->TessEval.VertexOrder = linked_shader->TessEval.VertexOrder;
+
+   if (linked_shader->TessEval.PointMode == -1)
+      linked_shader->TessEval.PointMode = GL_FALSE;
+   prog->TessEval.PointMode = linked_shader->TessEval.PointMode;
+}
+
+
 /**
  * Performs the cross-validation of layout qualifiers specified in
  * redeclaration of gl_FragCoord for the attached fragment shaders,
@@ -1696,6 +2006,8 @@ link_intrastage_shaders(void *mem_ctx,
    ralloc_steal(linked, linked->UniformBlocks);
 
    link_fs_input_layout_qualifiers(prog, linked, shader_list, num_shaders);
+   link_tcs_out_layout_qualifiers(prog, linked, shader_list, num_shaders);
+   link_tes_in_layout_qualifiers(prog, linked, shader_list, num_shaders);
    link_gs_inout_layout_qualifiers(prog, linked, shader_list, num_shaders);
    link_cs_input_layout_qualifiers(prog, linked, shader_list, num_shaders);
 
@@ -1777,6 +2089,14 @@ link_intrastage_shaders(void *mem_ctx,
 
    if (ctx->Const.VertexID_is_zero_based)
       lower_vertex_id(linked);
+
+   /* Validate correct usage of barrier() in the tess control shader */
+   if (linked->Stage == MESA_SHADER_TESS_CTRL) {
+      barrier_use_visitor visitor(prog);
+      foreach_in_list(ir_instruction, ir, linked->ir) {
+         ir->accept(&visitor);
+      }
+   }
 
    /* Make a pass over all variable declarations to ensure that arrays with
     * unspecified sizes have a size specified.  The size is inferred from the
@@ -1868,6 +2188,34 @@ update_array_sizes(struct gl_shader_program *prog)
 	     */
 	 }
       }
+   }
+}
+
+/**
+ * Resize tessellation evaluation per-vertex inputs to the size of
+ * tessellation control per-vertex outputs.
+ */
+static void
+resize_tes_inputs(struct gl_context *ctx,
+                  struct gl_shader_program *prog)
+{
+   if (prog->_LinkedShaders[MESA_SHADER_TESS_EVAL] == NULL)
+      return;
+
+   gl_shader *const tcs = prog->_LinkedShaders[MESA_SHADER_TESS_CTRL];
+   gl_shader *const tes = prog->_LinkedShaders[MESA_SHADER_TESS_EVAL];
+
+   /* If no control shader is present, then the TES inputs are statically
+    * sized to MaxPatchVertices; the actual size of the arrays won't be
+    * known until draw time.
+    */
+   const int num_vertices = tcs
+      ? tcs->TessCtrl.VerticesOut
+      : ctx->Const.MaxPatchVertices;
+
+   tess_eval_array_resize_visitor input_resize_visitor(num_vertices, prog);
+   foreach_in_list(ir_instruction, ir, tes->ir) {
+      ir->accept(&input_resize_visitor);
    }
 }
 
@@ -2804,13 +3152,51 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    prog->Version = max_version;
    prog->IsES = is_es_prog;
 
-   /* Geometry shaders have to be linked with vertex shaders.
+   /* Some shaders have to be linked with some other shaders present.
     */
    if (num_shaders[MESA_SHADER_GEOMETRY] > 0 &&
        num_shaders[MESA_SHADER_VERTEX] == 0 &&
        !prog->SeparateShader) {
       linker_error(prog, "Geometry shader must be linked with "
 		   "vertex shader\n");
+      goto done;
+   }
+   if (num_shaders[MESA_SHADER_TESS_EVAL] > 0 &&
+       num_shaders[MESA_SHADER_VERTEX] == 0 &&
+       !prog->SeparateShader) {
+      linker_error(prog, "Tessellation evaluation shader must be linked with "
+		   "vertex shader\n");
+      goto done;
+   }
+   if (num_shaders[MESA_SHADER_TESS_CTRL] > 0 &&
+       num_shaders[MESA_SHADER_VERTEX] == 0 &&
+       !prog->SeparateShader) {
+      linker_error(prog, "Tessellation control shader must be linked with "
+		   "vertex shader\n");
+      goto done;
+   }
+
+   /* The spec is self-contradictory here. It allows linking without a tess
+    * eval shader, but that can only be used with transform feedback and
+    * rasterization disabled. However, transform feedback isn't allowed
+    * with GL_PATCHES, so it can't be used.
+    *
+    * More investigation showed that the idea of transform feedback after
+    * a tess control shader was dropped, because some hw vendors couldn't
+    * support tessellation without a tess eval shader, but the linker section
+    * wasn't updated to reflect that.
+    *
+    * All specifications (ARB_tessellation_shader, GL 4.0-4.5) have this
+    * spec bug.
+    *
+    * Do what's reasonable and always require a tess eval shader if a tess
+    * control shader is present.
+    */
+   if (num_shaders[MESA_SHADER_TESS_CTRL] > 0 &&
+       num_shaders[MESA_SHADER_TESS_EVAL] == 0 &&
+       !prog->SeparateShader) {
+      linker_error(prog, "Tessellation control shader must be linked with "
+		   "tessellation evaluation shader\n");
       goto done;
    }
 
@@ -2846,6 +3232,12 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
          case MESA_SHADER_VERTEX:
             validate_vertex_shader_executable(prog, sh);
             break;
+         case MESA_SHADER_TESS_CTRL:
+            /* nothing to be done */
+            break;
+         case MESA_SHADER_TESS_EVAL:
+            validate_tess_eval_shader_executable(prog, sh);
+            break;
          case MESA_SHADER_GEOMETRY:
             validate_geometry_shader_executable(prog, sh);
             break;
@@ -2865,6 +3257,8 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 
    if (num_shaders[MESA_SHADER_GEOMETRY] > 0)
       prog->LastClipDistanceArraySize = prog->Geom.ClipDistanceArraySize;
+   else if (num_shaders[MESA_SHADER_TESS_EVAL] > 0)
+      prog->LastClipDistanceArraySize = prog->TessEval.ClipDistanceArraySize;
    else if (num_shaders[MESA_SHADER_VERTEX] > 0)
       prog->LastClipDistanceArraySize = prog->Vert.ClipDistanceArraySize;
    else
@@ -2888,6 +3282,8 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    check_explicit_uniform_locations(ctx, prog);
    if (!prog->LinkStatus)
       goto done;
+
+   resize_tes_inputs(ctx, prog);
 
    /* Validate the inputs of each stage with the output of the preceding
     * stage.
@@ -2951,6 +3347,10 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 
       if (ctx->Const.ShaderCompilerOptions[i].LowerClipDistance) {
          lower_clip_distance(prog->_LinkedShaders[i]);
+      }
+
+      if (ctx->Const.ShaderCompilerOptions[i].LowerTessLevel) {
+         lower_tess_level(prog->_LinkedShaders[i]);
       }
 
       while (do_common_optimization(prog->_LinkedShaders[i]->ir, true, false,
@@ -3039,8 +3439,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
           */
          if (!assign_varying_locations(ctx, mem_ctx, prog,
                                        NULL, prog->_LinkedShaders[first],
-                                       num_tfeedback_decls, tfeedback_decls,
-                                       prog->Geom.VerticesIn))
+                                       num_tfeedback_decls, tfeedback_decls))
             goto done;
       }
 
@@ -3051,8 +3450,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
           */
          if (!assign_varying_locations(ctx, mem_ctx, prog,
                                        sh, NULL,
-                                       num_tfeedback_decls, tfeedback_decls,
-                                       0))
+                                       num_tfeedback_decls, tfeedback_decls))
             goto done;
       }
 
@@ -3080,8 +3478,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
                                        NULL /* producer */,
                                        sh /* consumer */,
                                        0 /* num_tfeedback_decls */,
-                                       NULL /* tfeedback_decls */,
-                                       0 /* gs_input_vertices */))
+                                       NULL /* tfeedback_decls */))
             goto done;
       } else
          demote_shader_inputs_and_outputs(sh, ir_var_shader_in);
@@ -3097,12 +3494,10 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 
       gl_shader *const sh_i = prog->_LinkedShaders[i];
       gl_shader *const sh_next = prog->_LinkedShaders[next];
-      unsigned gs_input_vertices =
-         next == MESA_SHADER_GEOMETRY ? prog->Geom.VerticesIn : 0;
 
       if (!assign_varying_locations(ctx, mem_ctx, prog, sh_i, sh_next,
                 next == MESA_SHADER_FRAGMENT ? num_tfeedback_decls : 0,
-                tfeedback_decls, gs_input_vertices))
+                tfeedback_decls))
          goto done;
 
       do_dead_builtin_varyings(ctx, sh_i, sh_next,

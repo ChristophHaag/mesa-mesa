@@ -36,25 +36,30 @@
 static void si_destroy_context(struct pipe_context *context)
 {
 	struct si_context *sctx = (struct si_context *)context;
+	int i;
 
 	si_release_all_descriptors(sctx);
 
 	pipe_resource_reference(&sctx->esgs_ring, NULL);
 	pipe_resource_reference(&sctx->gsvs_ring, NULL);
+	pipe_resource_reference(&sctx->tf_ring, NULL);
 	pipe_resource_reference(&sctx->null_const_buf.buffer, NULL);
 	r600_resource_reference(&sctx->border_color_table, NULL);
 	r600_resource_reference(&sctx->scratch_buffer, NULL);
 
 	si_pm4_free_state(sctx, sctx->init_config, ~0);
 	si_pm4_delete_state(sctx, gs_rings, sctx->gs_rings);
-	si_pm4_delete_state(sctx, gs_onoff, sctx->gs_on);
-	si_pm4_delete_state(sctx, gs_onoff, sctx->gs_off);
+	si_pm4_delete_state(sctx, tf_ring, sctx->tf_state);
+	for (i = 0; i < Elements(sctx->vgt_shader_config); i++)
+		si_pm4_delete_state(sctx, vgt_shader_config, sctx->vgt_shader_config[i]);
 
 	if (sctx->pstipple_sampler_state)
 		sctx->b.b.delete_sampler_state(&sctx->b.b, sctx->pstipple_sampler_state);
 	if (sctx->dummy_pixel_shader) {
 		sctx->b.b.delete_fs_state(&sctx->b.b, sctx->dummy_pixel_shader);
 	}
+	if (sctx->fixed_func_tcs_shader)
+		sctx->b.b.delete_tcs_state(&sctx->b.b, sctx->fixed_func_tcs_shader);
 	sctx->b.b.delete_depth_stencil_alpha_state(&sctx->b.b, sctx->custom_dsa_flush);
 	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_resolve);
 	sctx->b.b.delete_blend_state(&sctx->b.b, sctx->custom_blend_decompress);
@@ -296,6 +301,9 @@ static int si_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
 		return 0;
 
+	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+		return 30;
+
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
 		return PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_R600;
 
@@ -375,6 +383,13 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 	case PIPE_SHADER_VERTEX:
 	case PIPE_SHADER_GEOMETRY:
 		break;
+	case PIPE_SHADER_TESS_CTRL:
+	case PIPE_SHADER_TESS_EVAL:
+		/* LLVM 3.6.2 is required for tessellation because of bug fixes there */
+		if (HAVE_LLVM < 0x0306 ||
+		    (HAVE_LLVM == 0x0306 && MESA_LLVM_VERSION_PATCH < 2))
+			return 0;
+		break;
 	case PIPE_SHADER_COMPUTE:
 		switch (param) {
 		case PIPE_SHADER_CAP_PREFERRED_IR:
@@ -401,7 +416,6 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 		}
 		break;
 	default:
-		/* TODO: support tessellation */
 		return 0;
 	}
 
@@ -433,7 +447,7 @@ static int si_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enu
 		/* Indirection of geometry shader input dimension is not
 		 * handled yet
 		 */
-		return shader < PIPE_SHADER_GEOMETRY;
+		return shader != PIPE_SHADER_GEOMETRY;
 	case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:

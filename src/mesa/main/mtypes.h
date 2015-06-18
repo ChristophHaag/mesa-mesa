@@ -90,7 +90,7 @@ struct vbo_context;
 
 
 /** Extra draw modes beyond GL_POINTS, GL_TRIANGLE_FAN, etc */
-#define PRIM_MAX                 GL_TRIANGLE_STRIP_ADJACENCY
+#define PRIM_MAX                 GL_PATCHES
 #define PRIM_OUTSIDE_BEGIN_END   (PRIM_MAX + 1)
 #define PRIM_UNKNOWN             (PRIM_MAX + 2)
 
@@ -240,8 +240,12 @@ typedef enum
    VARYING_SLOT_VIEWPORT, /* Appears as VS or GS output */
    VARYING_SLOT_FACE, /* FS only */
    VARYING_SLOT_PNTC, /* FS only */
+   VARYING_SLOT_TESS_LEVEL_OUTER, /* Only appears as TCS output. */
+   VARYING_SLOT_TESS_LEVEL_INNER, /* Only appears as TCS output. */
    VARYING_SLOT_VAR0, /* First generic varying slot */
-   VARYING_SLOT_MAX = VARYING_SLOT_VAR0 + MAX_VARYING
+   VARYING_SLOT_MAX = VARYING_SLOT_VAR0 + MAX_VARYING,
+   VARYING_SLOT_PATCH0 = VARYING_SLOT_MAX,
+   VARYING_SLOT_TESS_MAX = VARYING_SLOT_PATCH0 + MAX_VARYING
 } gl_varying_slot;
 
 
@@ -276,6 +280,8 @@ typedef enum
 #define VARYING_BIT_VIEWPORT BITFIELD64_BIT(VARYING_SLOT_VIEWPORT)
 #define VARYING_BIT_FACE BITFIELD64_BIT(VARYING_SLOT_FACE)
 #define VARYING_BIT_PNTC BITFIELD64_BIT(VARYING_SLOT_PNTC)
+#define VARYING_BIT_TESS_LEVEL_OUTER BITFIELD64_BIT(VARYING_SLOT_TESS_LEVEL_OUTER)
+#define VARYING_BIT_TESS_LEVEL_INNER BITFIELD64_BIT(VARYING_SLOT_TESS_LEVEL_INNER)
 #define VARYING_BIT_VAR(V) BITFIELD64_BIT(VARYING_SLOT_VAR0 + (V))
 /*@}*/
 
@@ -292,6 +298,8 @@ _mesa_varying_slot_in_fs(gl_varying_slot slot)
    case VARYING_SLOT_EDGE:
    case VARYING_SLOT_CLIP_VERTEX:
    case VARYING_SLOT_LAYER:
+   case VARYING_SLOT_TESS_LEVEL_OUTER:
+   case VARYING_SLOT_TESS_LEVEL_INNER:
       return GL_FALSE;
    default:
       return GL_TRUE;
@@ -2096,6 +2104,8 @@ struct gl_program
    GLbitfield64 InputsRead;     /**< Bitmask of which input regs are read */
    GLbitfield64 DoubleInputsRead;     /**< Bitmask of which input regs are read  and are doubles */
    GLbitfield64 OutputsWritten; /**< Bitmask of which output regs are written */
+   GLbitfield PatchInputsRead;  /**< VAR[0..31] usage for patch inputs (user-defined only) */
+   GLbitfield PatchOutputsWritten; /**< VAR[0..31] usage for patch outputs (user-defined only) */
    GLbitfield SystemValuesRead;   /**< Bitmask of SYSTEM_VALUE_x inputs used */
    GLbitfield TexturesUsed[MAX_COMBINED_TEXTURE_IMAGE_UNITS];  /**< TEXTURE_x_BIT bitmask */
    GLbitfield SamplersUsed;   /**< Bitfield of which samplers are used */
@@ -2160,6 +2170,29 @@ struct gl_vertex_program
 {
    struct gl_program Base;   /**< base class */
    GLboolean IsPositionInvariant;
+};
+
+
+/** Tessellation control program object */
+struct gl_tess_ctrl_program
+{
+   struct gl_program Base;   /**< base class */
+
+   /* output layout */
+   GLint VerticesOut;
+};
+
+
+/** Tessellation evaluation program object */
+struct gl_tess_eval_program
+{
+   struct gl_program Base;   /**< base class */
+
+   /* input layout */
+   GLenum PrimitiveMode; /* GL_TRIANGLES, GL_QUADS or GL_ISOLINES */
+   GLenum Spacing;       /* GL_EQUAL, GL_FRACTIONAL_EVEN, GL_FRACTIONAL_ODD */
+   GLenum VertexOrder;   /* GL_CW or GL_CCW */
+   bool PointMode;
 };
 
 
@@ -2265,6 +2298,27 @@ struct gl_vertex_program_state
    GLboolean _Overriden;
 };
 
+/**
+ * Context state for tessellation control programs.
+ */
+struct gl_tess_ctrl_program_state
+{
+   /** Currently bound and valid shader. */
+   struct gl_tess_ctrl_program *_Current;
+
+   GLint patch_vertices;
+   GLfloat patch_default_outer_level[4];
+   GLfloat patch_default_inner_level[2];
+};
+
+/**
+ * Context state for tessellation evaluation programs.
+ */
+struct gl_tess_eval_program_state
+{
+   /** Currently bound and valid shader. */
+   struct gl_tess_eval_program *_Current;
+};
 
 /**
  * Context state for geometry programs.
@@ -2365,7 +2419,8 @@ struct gl_ati_fragment_shader_state
  */
 struct gl_shader
 {
-   /** GL_FRAGMENT_SHADER || GL_VERTEX_SHADER || GL_GEOMETRY_SHADER_ARB.
+   /** GL_FRAGMENT_SHADER || GL_VERTEX_SHADER || GL_GEOMETRY_SHADER_ARB ||
+    *  GL_TESS_CONTROL_SHADER || GL_TESS_EVALUATION_SHADER.
     * Must be the first field.
     */
    GLenum Type;
@@ -2443,6 +2498,41 @@ struct gl_shader
     */
    bool origin_upper_left;
    bool pixel_center_integer;
+
+   /**
+    * Tessellation Control shader state from layout qualifiers.
+    */
+   struct {
+      /**
+       * 0 - vertices not declared in shader, or
+       * 1 .. GL_MAX_PATCH_VERTICES
+       */
+      GLint VerticesOut;
+   } TessCtrl;
+
+   /**
+    * Tessellation Evaluation shader state from layout qualifiers.
+    */
+   struct {
+      /**
+       * GL_TRIANGLES, GL_QUADS, GL_ISOLINES or PRIM_UNKNOWN if it's not set
+       * in this shader.
+       */
+      GLenum PrimitiveMode;
+      /**
+       * GL_EQUAL, GL_FRACTIONAL_ODD, GL_FRACTIONAL_EVEN, or 0 if it's not set
+       * in this shader.
+       */
+      GLenum Spacing;
+      /**
+       * GL_CW, GL_CCW, or 0 if it's not set in this shader.
+       */
+      GLenum VertexOrder;
+      /**
+       * 1, 0, or -1 if it's not set in this shader.
+       */
+      int PointMode;
+   } TessEval;
 
    /**
     * Geometry shader state from GLSL 1.50 layout qualifiers.
@@ -2668,6 +2758,37 @@ struct gl_shader_program
    enum gl_frag_depth_layout FragDepthLayout;
 
    /**
+    * Tessellation Control shader state from layout qualifiers.
+    */
+   struct {
+      /**
+       * 0 - vertices not declared in shader, or
+       * 1 .. GL_MAX_PATCH_VERTICES
+       */
+      GLint VerticesOut;
+   } TessCtrl;
+
+   /**
+    * Tessellation Evaluation shader state from layout qualifiers.
+    */
+   struct {
+      /** GL_TRIANGLES, GL_QUADS or GL_ISOLINES */
+      GLenum PrimitiveMode;
+      /** GL_EQUAL, GL_FRACTIONAL_ODD or GL_FRACTIONAL_EVEN */
+      GLenum Spacing;
+      /** GL_CW or GL_CCW */
+      GLenum VertexOrder;
+      bool PointMode;
+      /**
+       * True if gl_ClipDistance is written to.  Copied into
+       * gl_tess_eval_program by _mesa_copy_linked_program_data().
+       */
+      GLboolean UsesClipDistance;
+      GLuint ClipDistanceArraySize; /**< Size of the gl_ClipDistance array, or
+                                         0 if not present. */
+   } TessEval;
+
+   /**
     * Geometry shader state - copied into gl_geometry_program by
     * _mesa_copy_linked_program_data().
     */
@@ -2872,6 +2993,7 @@ struct gl_shader_compiler_options
    GLboolean EmitNoPow;                   /**< Emit POW opcodes? */
    GLboolean EmitNoSat;                   /**< Emit SAT opcodes? */
    GLboolean LowerClipDistance; /**< Lower gl_ClipDistance from float[8] to vec4[2]? */
+   GLboolean LowerTessLevel;    /**< Lower gl_TessLevel* from float[n] to vecn? */
 
    /**
     * \name Forms of indirect addressing the driver cannot do.
@@ -3623,6 +3745,12 @@ struct gl_constants
    GLenum ContextReleaseBehavior;
 
    struct gl_shader_compiler_options ShaderCompilerOptions[MESA_SHADER_STAGES];
+
+   /** GL_ARB_tessellation_shader */
+   GLuint MaxPatchVertices;
+   GLuint MaxTessGenLevel;
+   GLuint MaxTessPatchComponents;
+   GLuint MaxTessControlTotalOutputComponents;
 };
 
 
@@ -4026,6 +4154,11 @@ struct gl_driver_flags
     * gl_context::ImageUnits
     */
    uint64_t NewImageUnits;
+
+   /**
+    * gl_context::TessCtrlProgram::patch_default_*
+    */
+   uint64_t NewDefaultTessLevels;
 };
 
 struct gl_uniform_buffer_binding
@@ -4247,6 +4380,8 @@ struct gl_context
    struct gl_fragment_program_state FragmentProgram;
    struct gl_geometry_program_state GeometryProgram;
    struct gl_compute_program_state ComputeProgram;
+   struct gl_tess_ctrl_program_state TessCtrlProgram;
+   struct gl_tess_eval_program_state TessEvalProgram;
    struct gl_ati_fragment_shader_state ATIFragmentShader;
 
    struct gl_pipeline_shader_state Pipeline; /**< GLSL pipeline shader object state */

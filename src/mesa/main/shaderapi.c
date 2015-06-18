@@ -110,6 +110,7 @@ _mesa_init_shader_state(struct gl_context *ctx)
     */
    struct gl_shader_compiler_options options;
    gl_shader_stage sh;
+   int i;
 
    memset(&options, 0, sizeof(options));
    options.MaxUnrollIterations = 32;
@@ -126,6 +127,12 @@ _mesa_init_shader_state(struct gl_context *ctx)
    /* Extended for ARB_separate_shader_objects */
    ctx->Shader.RefCount = 1;
    mtx_init(&ctx->Shader.Mutex, mtx_plain);
+
+   ctx->TessCtrlProgram.patch_vertices = 3;
+   for (i = 0; i < 4; ++i)
+      ctx->TessCtrlProgram.patch_default_outer_level[i] = 1.0;
+   for (i = 0; i < 2; ++i)
+      ctx->TessCtrlProgram.patch_default_inner_level[i] = 1.0;
 }
 
 
@@ -199,6 +206,9 @@ _mesa_validate_shader_target(const struct gl_context *ctx, GLenum type)
       return ctx == NULL || ctx->Extensions.ARB_vertex_shader;
    case GL_GEOMETRY_SHADER_ARB:
       return ctx == NULL || _mesa_has_geometry_shaders(ctx);
+   case GL_TESS_CONTROL_SHADER:
+   case GL_TESS_EVALUATION_SHADER:
+      return ctx == NULL || _mesa_has_tessellation(ctx);
    case GL_COMPUTE_SHADER:
       return ctx == NULL || ctx->Extensions.ARB_compute_shader;
    default:
@@ -415,6 +425,8 @@ detach_shader(struct gl_context *ctx, GLuint program, GLuint shader)
          /* sanity check - make sure the new list's entries are sensible */
          for (j = 0; j < shProg->NumShaders; j++) {
             assert(shProg->Shaders[j]->Type == GL_VERTEX_SHADER ||
+                   shProg->Shaders[j]->Type == GL_TESS_CONTROL_SHADER ||
+                   shProg->Shaders[j]->Type == GL_TESS_EVALUATION_SHADER ||
                    shProg->Shaders[j]->Type == GL_GEOMETRY_SHADER ||
                    shProg->Shaders[j]->Type == GL_FRAGMENT_SHADER);
             assert(shProg->Shaders[j]->RefCount > 0);
@@ -511,6 +523,57 @@ check_gs_query(struct gl_context *ctx, const struct gl_shader_program *shProg)
 
 
 /**
+ * Check if a tessellation control shader query is valid at this time.
+ * If not, report an error and return false.
+ *
+ * From GL 4.0 section 6.1.12 (Shader and Program Queries):
+ *
+ *     "If TESS_CONTROL_OUTPUT_VERTICES is queried for a program which has
+ *     not been linked successfully, or which does not contain objects to
+ *     form a tessellation control shader, then an INVALID_OPERATION error is
+ *     generated."
+ */
+static bool
+check_tcs_query(struct gl_context *ctx, const struct gl_shader_program *shProg)
+{
+   if (shProg->LinkStatus &&
+       shProg->_LinkedShaders[MESA_SHADER_TESS_CTRL] != NULL) {
+      return true;
+   }
+
+   _mesa_error(ctx, GL_INVALID_OPERATION,
+               "glGetProgramv(linked tessellation control shader required)");
+   return false;
+}
+
+
+/**
+ * Check if a tessellation evaluation shader query is valid at this time.
+ * If not, report an error and return false.
+ *
+ * From GL 4.0 section 6.1.12 (Shader and Program Queries):
+ *
+ *     "If any of the pname values in this paragraph are queried for a program
+ *     which has not been linked successfully, or which does not contain
+ *     objects to form a tessellation evaluation shader, then an
+ *     INVALID_OPERATION error is generated."
+ *
+ */
+static bool
+check_tes_query(struct gl_context *ctx, const struct gl_shader_program *shProg)
+{
+   if (shProg->LinkStatus &&
+       shProg->_LinkedShaders[MESA_SHADER_TESS_EVAL] != NULL) {
+      return true;
+   }
+
+   _mesa_error(ctx, GL_INVALID_OPERATION, "glGetProgramv(linked tessellation "
+               "evaluation shader required)");
+   return false;
+}
+
+
+/**
  * glGetProgramiv() - get shader program state.
  * Note that this is for GLSL shader programs, not ARB vertex/fragment
  * programs (see glGetProgramivARB).
@@ -533,6 +596,7 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname,
     * and GL 3.2) are available in this context
     */
    const bool has_core_gs = _mesa_has_geometry_shaders(ctx);
+   const bool has_tess = _mesa_has_tessellation(ctx);
 
    /* Are uniform buffer objects available in this context?
     */
@@ -710,6 +774,38 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname,
    }
    case GL_PROGRAM_SEPARABLE:
       *params = shProg->SeparateShader;
+      return;
+
+   /* ARB_tessellation_shader */
+   case GL_TESS_CONTROL_OUTPUT_VERTICES:
+      if (!has_tess)
+         break;
+      if (check_tcs_query(ctx, shProg))
+         *params = shProg->TessCtrl.VerticesOut;
+      return;
+   case GL_TESS_GEN_MODE:
+      if (!has_tess)
+         break;
+      if (check_tes_query(ctx, shProg))
+         *params = shProg->TessEval.PrimitiveMode;
+      return;
+   case GL_TESS_GEN_SPACING:
+      if (!has_tess)
+         break;
+      if (check_tes_query(ctx, shProg))
+         *params = shProg->TessEval.Spacing;
+      return;
+   case GL_TESS_GEN_VERTEX_ORDER:
+      if (!has_tess)
+         break;
+      if (check_tes_query(ctx, shProg))
+         *params = shProg->TessEval.VertexOrder;
+      return;
+   case GL_TESS_GEN_POINT_MODE:
+      if (!has_tess)
+         break;
+      if (check_tes_query(ctx, shProg))
+         *params = shProg->TessEval.PointMode;
       return;
    default:
       break;
@@ -992,6 +1088,12 @@ print_shader_info(const struct gl_shader_program *shProg)
    if (shProg->_LinkedShaders[MESA_SHADER_GEOMETRY])
       printf("  geom prog %u\n",
 	     shProg->_LinkedShaders[MESA_SHADER_GEOMETRY]->Program->Id);
+   if (shProg->_LinkedShaders[MESA_SHADER_TESS_CTRL])
+      printf("  tesc prog %u\n",
+	     shProg->_LinkedShaders[MESA_SHADER_TESS_CTRL]->Program->Id);
+   if (shProg->_LinkedShaders[MESA_SHADER_TESS_EVAL])
+      printf("  tese prog %u\n",
+	     shProg->_LinkedShaders[MESA_SHADER_TESS_EVAL]->Program->Id);
 }
 
 
@@ -1037,11 +1139,9 @@ use_shader_program(struct gl_context *ctx, gl_shader_stage stage,
        */
       switch (stage) {
       case MESA_SHADER_VERTEX:
-	 /* Empty for now. */
-	 break;
+      case MESA_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_EVAL:
       case MESA_SHADER_GEOMETRY:
-	 /* Empty for now. */
-	 break;
       case MESA_SHADER_COMPUTE:
          /* Empty for now. */
          break;
@@ -1944,6 +2044,22 @@ _mesa_copy_linked_program_data(gl_shader_stage type,
    case MESA_SHADER_VERTEX:
       dst->UsesClipDistanceOut = src->Vert.UsesClipDistance;
       break;
+   case MESA_SHADER_TESS_CTRL: {
+      struct gl_tess_ctrl_program *dst_tcp =
+         (struct gl_tess_ctrl_program *) dst;
+      dst_tcp->VerticesOut = src->TessCtrl.VerticesOut;
+      break;
+   }
+   case MESA_SHADER_TESS_EVAL: {
+      struct gl_tess_eval_program *dst_tep =
+         (struct gl_tess_eval_program *) dst;
+      dst_tep->PrimitiveMode = src->TessEval.PrimitiveMode;
+      dst_tep->Spacing = src->TessEval.Spacing;
+      dst_tep->VertexOrder = src->TessEval.VertexOrder;
+      dst_tep->PointMode = src->TessEval.PointMode;
+      dst->UsesClipDistanceOut = src->TessEval.UsesClipDistance;
+      break;
+   }
    case MESA_SHADER_GEOMETRY: {
       struct gl_geometry_program *dst_gp = (struct gl_geometry_program *) dst;
       dst_gp->VerticesIn = src->Geom.VerticesIn;
@@ -1984,3 +2100,61 @@ _mesa_CreateShaderProgramv(GLenum type, GLsizei count,
 
    return _mesa_create_shader_program(ctx, GL_TRUE, type, count, strings);
 }
+
+
+/**
+ * For GL_ARB_tessellation_shader
+ */
+extern void GLAPIENTRY
+_mesa_PatchParameteri(GLenum pname, GLint value)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (!_mesa_has_tessellation(ctx)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glPatchParameteri");
+      return;
+   }
+
+   if (pname != GL_PATCH_VERTICES) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "glPatchParameteri");
+      return;
+   }
+
+   if (value <= 0 || value > ctx->Const.MaxPatchVertices) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glPatchParameteri");
+      return;
+   }
+
+   ctx->TessCtrlProgram.patch_vertices = value;
+}
+
+
+extern void GLAPIENTRY
+_mesa_PatchParameterfv(GLenum pname, const GLfloat *values)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (!_mesa_has_tessellation(ctx)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glPatchParameterfv");
+      return;
+   }
+
+   switch(pname) {
+   case GL_PATCH_DEFAULT_OUTER_LEVEL:
+      FLUSH_VERTICES(ctx, 0);
+      memcpy(ctx->TessCtrlProgram.patch_default_outer_level, values,
+             4 * sizeof(GLfloat));
+      ctx->NewDriverState |= ctx->DriverFlags.NewDefaultTessLevels;
+      return;
+   case GL_PATCH_DEFAULT_INNER_LEVEL:
+      FLUSH_VERTICES(ctx, 0);
+      memcpy(ctx->TessCtrlProgram.patch_default_inner_level, values,
+             2 * sizeof(GLfloat));
+      ctx->NewDriverState |= ctx->DriverFlags.NewDefaultTessLevels;
+      return;
+   default:
+      _mesa_error(ctx, GL_INVALID_ENUM, "glPatchParameterfv");
+      return;
+   }
+}
+

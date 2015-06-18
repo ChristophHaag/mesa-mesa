@@ -829,6 +829,10 @@ stage_from_enum(GLenum ref)
    switch (ref) {
    case GL_REFERENCED_BY_VERTEX_SHADER:
       return MESA_SHADER_VERTEX;
+   case GL_REFERENCED_BY_TESS_CONTROL_SHADER:
+      return MESA_SHADER_TESS_CTRL;
+   case GL_REFERENCED_BY_TESS_EVALUATION_SHADER:
+      return MESA_SHADER_TESS_EVAL;
    case GL_REFERENCED_BY_GEOMETRY_SHADER:
       return MESA_SHADER_GEOMETRY;
    case GL_REFERENCED_BY_FRAGMENT_SHADER:
@@ -1014,6 +1018,8 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
          goto invalid_enum;
       /* fallthrough */
    case GL_REFERENCED_BY_VERTEX_SHADER:
+   case GL_REFERENCED_BY_TESS_CONTROL_SHADER:
+   case GL_REFERENCED_BY_TESS_EVALUATION_SHADER:
    case GL_REFERENCED_BY_GEOMETRY_SHADER:
    case GL_REFERENCED_BY_FRAGMENT_SHADER:
       switch (res->Type) {
@@ -1044,11 +1050,15 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
          goto invalid_operation;
       *val = RESOURCE_VAR(res)->data.index;
       return 1;
-
-   /* GL_ARB_tessellation_shader */
    case GL_IS_PER_PATCH:
-   case GL_REFERENCED_BY_TESS_CONTROL_SHADER:
-   case GL_REFERENCED_BY_TESS_EVALUATION_SHADER:
+      switch (res->Type) {
+      case GL_PROGRAM_INPUT:
+      case GL_PROGRAM_OUTPUT:
+         *val = RESOURCE_VAR(res)->data.patch;
+         return 1;
+      default:
+         goto invalid_operation;
+      }
    default:
       goto invalid_enum;
    }
