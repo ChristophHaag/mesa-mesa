@@ -127,6 +127,7 @@ new_program(UNUSED struct gl_context *ctx, GLenum target,
 }
 
 static const struct standalone_options *options;
+static int glsl_version = 450;
 
 static void
 initialize_context(struct gl_context *ctx, gl_api api)
@@ -249,8 +250,6 @@ initialize_context(struct gl_context *ctx, gl_api api)
 
       ctx->Const.MaxVarying = ctx->Const.Program[MESA_SHADER_VERTEX].MaxOutputComponents / 4;
       break;
-   case 150:
-   case 330:
    case 400:
    case 410:
    case 420:
@@ -258,6 +257,17 @@ initialize_context(struct gl_context *ctx, gl_api api)
    case 440:
    case 450:
    case 460:
+      ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxUniformComponents = 1024;
+      ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxInputComponents = 128;
+      ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxOutputComponents = 128;
+
+      ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits = 16;
+      ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxUniformComponents = 1024;
+      ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxInputComponents = 128;
+      ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxOutputComponents = 128;
+      /* fallthrough */
+   case 150:
+   case 330:
       ctx->Const.MaxClipPlanes = 8;
       ctx->Const.MaxDrawBuffers = 8;
       ctx->Const.MinProgramTexelOffset = -8;
@@ -295,6 +305,8 @@ initialize_context(struct gl_context *ctx, gl_api api)
 
       ctx->Const.MaxCombinedTextureImageUnits =
          ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits
+         + ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxTextureImageUnits
+         + ctx->Const.Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits
          + ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits
          + ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits;
 
@@ -331,6 +343,14 @@ initialize_context(struct gl_context *ctx, gl_api api)
 
       ctx->Const.MaxVarying = ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxInputComponents / 4;
       break;
+   }
+
+   if (ctx->Const.GLSLVersion >= 400) {
+      ctx->Const.MaxVertexStreams = 4;
+      ctx->Const.MaxTransformFeedbackBuffers = 4; //seems to be 4 usually
+   }
+   if (ctx->Const.GLSLVersion >= 430) {
+      ctx->Const.MaxUserAssignableUniformLocations = 16384;
    }
 
    ctx->Const.GenerateTemporaryNames = true;
