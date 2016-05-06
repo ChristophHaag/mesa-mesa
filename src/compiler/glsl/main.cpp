@@ -156,6 +156,7 @@ initialize_context(struct gl_context *ctx, gl_api api)
    case 410:
    case 420:
    case 430:
+      ctx->Const.MaxUserAssignableUniformLocations = 1024;
    case 440:
    case 450:
       ctx->Const.Program[MESA_SHADER_TESS_CTRL].MaxTextureImageUnits = 16;
