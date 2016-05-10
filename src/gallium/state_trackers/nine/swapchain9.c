@@ -79,7 +79,8 @@ NineSwapChain9_ctor( struct NineSwapChain9 *This,
 static D3DWindowBuffer *
 D3DWindowBuffer_create(struct NineSwapChain9 *This,
                        struct pipe_resource *resource,
-                       int depth)
+                       int depth,
+                       int for_frontbuffer_reading)
 {
     D3DWindowBuffer *ret;
     struct winsys_handle whandle;
@@ -88,8 +89,10 @@ D3DWindowBuffer_create(struct NineSwapChain9 *This,
     memset(&whandle, 0, sizeof(whandle));
     whandle.type = DRM_API_HANDLE_TYPE_FD;
     This->screen->resource_get_handle(This->screen, resource, &whandle,
-                                      PIPE_HANDLE_USAGE_EXPLICIT_FLUSH |
-                                      PIPE_HANDLE_USAGE_READ);
+                                      for_frontbuffer_reading ?
+                                          PIPE_HANDLE_USAGE_WRITE :
+                                          PIPE_HANDLE_USAGE_EXPLICIT_FLUSH |
+                                          PIPE_HANDLE_USAGE_READ);
     stride = whandle.stride;
     dmaBufFd = whandle.handle;
     ID3DPresent_NewD3DWindowBufferFromDmaBuf(This->present,
@@ -109,7 +112,6 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
                        D3DDISPLAYMODEEX *mode )
 {
     struct NineDevice9 *pDevice = This->base.device;
-    struct NineSurface9 **bufs;
     D3DSURFACE_DESC desc;
     HRESULT hr;
     struct pipe_resource *resource, tmplt;
@@ -123,7 +125,10 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     user_assert(pParams->SwapEffect, D3DERR_INVALIDCALL);
     user_assert((pParams->SwapEffect != D3DSWAPEFFECT_COPY) ||
                 (pParams->BackBufferCount <= 1), D3DERR_INVALIDCALL);
-    user_assert(pDevice->ex || pParams->BackBufferCount <= 3, D3DERR_INVALIDCALL);
+    user_assert(pDevice->ex || pParams->BackBufferCount <=
+                D3DPRESENT_BACK_BUFFERS_MAX, D3DERR_INVALIDCALL);
+    user_assert(!pDevice->ex || pParams->BackBufferCount <=
+                D3DPRESENT_BACK_BUFFERS_MAX_EX, D3DERR_INVALIDCALL);
     user_assert(pDevice->ex ||
                 (pParams->SwapEffect == D3DSWAPEFFECT_FLIP) ||
                 (pParams->SwapEffect == D3DSWAPEFFECT_COPY) ||
@@ -154,10 +159,6 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
         nine_D3DPRESENTFLAG_to_str(pParams->Flags),
         pParams->FullScreen_RefreshRateInHz,
         pParams->PresentationInterval);
-
-    if (pParams->BackBufferCount > 3) {
-        pParams->BackBufferCount = 3;
-    }
 
     if (pParams->BackBufferCount == 0) {
         pParams->BackBufferCount = 1;
@@ -240,31 +241,27 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     desc.Width = pParams->BackBufferWidth;
     desc.Height = pParams->BackBufferHeight;
 
+    for (i = 0; i < oldBufferCount; i++) {
+        if (This->tasks[i])
+            _mesa_threadpool_wait_for_task(This->pool, &(This->tasks[i]));
+    }
+    memset(This->tasks, 0, sizeof(This->tasks));
+
     if (This->pool) {
-        _mesa_threadpool_destroy(This->pool);
+        _mesa_threadpool_destroy(This, This->pool);
         This->pool = NULL;
     }
     This->enable_threadpool = This->actx->thread_submit && (pParams->SwapEffect != D3DSWAPEFFECT_COPY);
     if (This->enable_threadpool)
-        This->pool = _mesa_threadpool_create();
+        This->pool = _mesa_threadpool_create(This);
     if (!This->pool)
         This->enable_threadpool = FALSE;
-
-    This->tasks = REALLOC(This->tasks,
-                          oldBufferCount * sizeof(struct threadpool_task *),
-                          newBufferCount * sizeof(struct threadpool_task *));
-    memset(This->tasks, 0, newBufferCount * sizeof(struct threadpool_task *));
 
     for (i = 0; i < oldBufferCount; i++) {
         ID3DPresent_DestroyD3DWindowBuffer(This->present, This->present_handles[i]);
         This->present_handles[i] = NULL;
-        if (This->present_buffers)
+        if (This->present_buffers[i])
             pipe_resource_reference(&(This->present_buffers[i]), NULL);
-    }
-
-    if (!has_present_buffers && This->present_buffers) {
-        FREE(This->present_buffers);
-        This->present_buffers = NULL;
     }
 
     if (newBufferCount != oldBufferCount) {
@@ -272,36 +269,17 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
              ++i)
             NineUnknown_Detach(NineUnknown(This->buffers[i]));
 
-        bufs = REALLOC(This->buffers,
-                       oldBufferCount * sizeof(This->buffers[0]),
-                       newBufferCount * sizeof(This->buffers[0]));
-        if (!bufs)
-            return E_OUTOFMEMORY;
-        This->buffers = bufs;
-        This->present_handles = REALLOC(This->present_handles,
-                                        oldBufferCount * sizeof(D3DWindowBuffer *),
-                                        newBufferCount * sizeof(D3DWindowBuffer *));
         for (i = oldBufferCount; i < newBufferCount; ++i) {
             This->buffers[i] = NULL;
             This->present_handles[i] = NULL;
         }
     }
 
-    if (has_present_buffers &&
-        (newBufferCount != oldBufferCount || !This->present_buffers)) {
-        This->present_buffers = REALLOC(This->present_buffers,
-                                        This->present_buffers == NULL ? 0 :
-                                        oldBufferCount * sizeof(struct pipe_resource *),
-                                        newBufferCount * sizeof(struct pipe_resource *));
-        memset(This->present_buffers, 0, newBufferCount * sizeof(struct pipe_resource *));
-    }
-
     for (i = 0; i < newBufferCount; ++i) {
-        tmplt.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_TRANSFER_READ |
-                     PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_RENDER_TARGET;
+        tmplt.bind = NINE_BIND_BACKBUFFER_FLAGS;
         tmplt.nr_samples = pParams->MultiSampleType;
         if (!has_present_buffers)
-            tmplt.bind |= PIPE_BIND_SHARED | PIPE_BIND_SCANOUT | PIPE_BIND_DISPLAY_TARGET;
+            tmplt.bind |= NINE_BIND_PRESENTBUFFER_FLAGS;
         tmplt.format = d3d9_to_pipe_format_checked(This->screen,
                                                    pParams->BackBufferFormat,
                                                    PIPE_TEXTURE_2D,
@@ -335,7 +313,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
         }
         if (has_present_buffers) {
             tmplt.format = PIPE_FORMAT_B8G8R8X8_UNORM;
-            tmplt.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHARED | PIPE_BIND_SCANOUT | PIPE_BIND_DISPLAY_TARGET;
+            tmplt.bind = NINE_BIND_PRESENTBUFFER_FLAGS;
             tmplt.nr_samples = 0;
             if (This->actx->linear_framebuffer)
                 tmplt.bind |= PIPE_BIND_LINEAR;
@@ -344,7 +322,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
             resource = This->screen->resource_create(This->screen, &tmplt);
             pipe_resource_reference(&(This->present_buffers[i]), resource);
         }
-        This->present_handles[i] = D3DWindowBuffer_create(This, resource, depth);
+        This->present_handles[i] = D3DWindowBuffer_create(This, resource, depth, false);
         pipe_resource_reference(&resource, NULL);
     }
     if (pParams->EnableAutoDepthStencil) {
@@ -504,17 +482,15 @@ NineSwapChain9_dtor( struct NineSwapChain9 *This )
     DBG("This=%p\n", This);
 
     if (This->pool)
-        _mesa_threadpool_destroy(This->pool);
+        _mesa_threadpool_destroy(This, This->pool);
 
-    if (This->buffers) {
+    if (This->buffers[0]) {
         for (i = 0; i < This->params.BackBufferCount; i++) {
             NineUnknown_Release(NineUnknown(This->buffers[i]));
             ID3DPresent_DestroyD3DWindowBuffer(This->present, This->present_handles[i]);
-            if (This->present_buffers)
+            if (This->present_buffers[i])
                 pipe_resource_reference(&(This->present_buffers[i]), NULL);
         }
-        FREE(This->buffers);
-        FREE(This->present_buffers);
     }
     if (This->zsbuf)
         NineUnknown_Destroy(NineUnknown(This->zsbuf));
@@ -543,15 +519,14 @@ create_present_buffer( struct NineSwapChain9 *This,
     tmplt.usage = PIPE_USAGE_DEFAULT;
     tmplt.flags = 0;
     tmplt.format = PIPE_FORMAT_B8G8R8X8_UNORM;
-    tmplt.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_TRANSFER_READ |
-                 PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_RENDER_TARGET |
-                 PIPE_BIND_SHARED | PIPE_BIND_SCANOUT | PIPE_BIND_DISPLAY_TARGET;
+    tmplt.bind = NINE_BIND_BACKBUFFER_FLAGS |
+                 NINE_BIND_PRESENTBUFFER_FLAGS;
     tmplt.nr_samples = 0;
     if (This->actx->linear_framebuffer)
         tmplt.bind |= PIPE_BIND_LINEAR;
     *resource = This->screen->resource_create(This->screen, &tmplt);
 
-    *present_handle = D3DWindowBuffer_create(This, *resource, 24);
+    *present_handle = D3DWindowBuffer_create(This, *resource, 24, true);
 }
 
 static void
@@ -686,7 +661,7 @@ present( struct NineSwapChain9 *This,
     if (This->params.SwapEffect == D3DSWAPEFFECT_DISCARD)
         handle_draw_cursor_and_hud(This, resource);
 
-    if (This->present_buffers) {
+    if (This->present_buffers[0]) {
         memset(&blit, 0, sizeof(blit));
         blit.src.resource = resource;
         blit.src.level = 0;
@@ -778,29 +753,31 @@ NineSwapChain9_Present( struct NineSwapChain9 *This,
     D3DWindowBuffer *handle_temp;
     struct threadpool_task *task_temp;
     int i;
-    HRESULT hr = present(This, pSourceRect, pDestRect,
-                         hDestWindowOverride, pDirtyRegion, dwFlags);
+    HRESULT hr;
 
     DBG("This=%p pSourceRect=%p pDestRect=%p hDestWindowOverride=%p "
         "pDirtyRegion=%p dwFlags=%d\n",
         This, pSourceRect, pDestRect, hDestWindowOverride,
         pDirtyRegion,dwFlags);
 
-    if (hr == D3DERR_WASSTILLDRAWING)
-        return hr;
-
     if (This->base.device->ex) {
         if (NineSwapChain9_GetOccluded(This)) {
             return S_PRESENT_OCCLUDED;
         }
     } else {
-        if (NineSwapChain9_GetOccluded(This)) {
+        if (NineSwapChain9_GetOccluded(This) ||
+            NineSwapChain9_ResolutionMismatch(This)) {
             This->base.device->device_needs_reset = TRUE;
         }
         if (This->base.device->device_needs_reset) {
             return D3DERR_DEVICELOST;
         }
     }
+
+    hr = present(This, pSourceRect, pDestRect,
+                 hDestWindowOverride, pDirtyRegion, dwFlags);
+    if (hr == D3DERR_WASSTILLDRAWING)
+        return hr;
 
     switch (This->params.SwapEffect) {
         case D3DSWAPEFFECT_FLIP:
@@ -816,7 +793,7 @@ NineSwapChain9_Present( struct NineSwapChain9 *This,
                 This->buffers[This->params.BackBufferCount], res);
             pipe_resource_reference(&res, NULL);
 
-            if (This->present_buffers) {
+            if (This->present_buffers[0]) {
                 pipe_resource_reference(&res, This->present_buffers[0]);
                 for (i = 1; i <= This->params.BackBufferCount; i++)
                     pipe_resource_reference(&(This->present_buffers[i-1]), This->present_buffers[i]);
@@ -1015,4 +992,35 @@ NineSwapChain9_GetOccluded( struct NineSwapChain9 *This )
     }
 
     return FALSE;
+}
+
+BOOL
+NineSwapChain9_ResolutionMismatch( struct NineSwapChain9 *This )
+{
+    if (This->base.device->minor_version_num > 1) {
+        return ID3DPresent_ResolutionMismatch(This->present);
+    }
+
+    return FALSE;
+}
+
+HANDLE
+NineSwapChain9_CreateThread( struct NineSwapChain9 *This,
+                                 void *pFuncAddress,
+                                 void *pParam )
+{
+    if (This->base.device->minor_version_num > 1) {
+        return ID3DPresent_CreateThread(This->present, pFuncAddress, pParam);
+    }
+
+    return NULL;
+}
+
+void
+NineSwapChain9_WaitForThread( struct NineSwapChain9 *This,
+                                  HANDLE thread )
+{
+    if (This->base.device->minor_version_num > 1) {
+        (void) ID3DPresent_WaitForThread(This->present, thread);
+    }
 }

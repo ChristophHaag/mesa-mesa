@@ -548,6 +548,9 @@ NineDevice9_TestCooperativeLevel( struct NineDevice9 *This )
     if (NineSwapChain9_GetOccluded(This->swapchains[0])) {
         This->device_needs_reset = TRUE;
         return D3DERR_DEVICELOST;
+    } else if (NineSwapChain9_ResolutionMismatch(This->swapchains[0])) {
+        This->device_needs_reset = TRUE;
+        return D3DERR_DEVICENOTRESET;
     } else if (This->device_needs_reset) {
         return D3DERR_DEVICENOTRESET;
     }
@@ -1318,51 +1321,61 @@ NineDevice9_UpdateTexture( struct NineDevice9 *This,
     struct NineBaseTexture9 *dstb = NineBaseTexture9(pDestinationTexture);
     struct NineBaseTexture9 *srcb = NineBaseTexture9(pSourceTexture);
     unsigned l, m;
-    unsigned last_level = dstb->base.info.last_level;
+    unsigned last_src_level, last_dst_level;
     RECT rect;
 
     DBG("This=%p pSourceTexture=%p pDestinationTexture=%p\n", This,
         pSourceTexture, pDestinationTexture);
 
+    user_assert(pSourceTexture && pDestinationTexture, D3DERR_INVALIDCALL);
     user_assert(pSourceTexture != pDestinationTexture, D3DERR_INVALIDCALL);
 
     user_assert(dstb->base.pool == D3DPOOL_DEFAULT, D3DERR_INVALIDCALL);
     user_assert(srcb->base.pool == D3DPOOL_SYSTEMMEM, D3DERR_INVALIDCALL);
-
-    if (dstb->base.usage & D3DUSAGE_AUTOGENMIPMAP) {
-        /* Only the first level is updated, the others regenerated. */
-        last_level = 0;
-        /* if the source has D3DUSAGE_AUTOGENMIPMAP, we have to ignore
-         * the sublevels, thus level 0 has to match */
-        user_assert(!(srcb->base.usage & D3DUSAGE_AUTOGENMIPMAP) ||
-                    (srcb->base.info.width0 == dstb->base.info.width0 &&
-                     srcb->base.info.height0 == dstb->base.info.height0 &&
-                     srcb->base.info.depth0 == dstb->base.info.depth0),
-                    D3DERR_INVALIDCALL);
-    } else {
-        user_assert(!(srcb->base.usage & D3DUSAGE_AUTOGENMIPMAP), D3DERR_INVALIDCALL);
-    }
-
     user_assert(dstb->base.type == srcb->base.type, D3DERR_INVALIDCALL);
+    user_assert(!(srcb->base.usage & D3DUSAGE_AUTOGENMIPMAP) ||
+                dstb->base.usage & D3DUSAGE_AUTOGENMIPMAP, D3DERR_INVALIDCALL);
 
-    /* Find src level that matches dst level 0: */
-    user_assert(srcb->base.info.width0 >= dstb->base.info.width0 &&
-                srcb->base.info.height0 >= dstb->base.info.height0 &&
-                srcb->base.info.depth0 >= dstb->base.info.depth0,
-                D3DERR_INVALIDCALL);
-    for (m = 0; m <= srcb->base.info.last_level; ++m) {
+    /* Spec: Failure if
+     * . Different formats
+     * . Fewer src levels than dst levels (if the opposite, only matching levels
+     *   are supposed to be copied)
+     * . Levels do not match
+     * DDI: Actually the above should pass because of legacy applications
+     * Do what you want about these, but you shouldn't crash.
+     * However driver can expect that the top dimension is greater for src than dst.
+     * Wine tests: Every combination that passes the initial checks should pass.
+     * . Different formats => conversion driver and format dependent.
+     * . 1 level, but size not matching => copy is done (and even crash if src bigger
+     * than dst. For the case where dst bigger, wine doesn't test if a stretch is applied
+     * or if a subrect is copied).
+     * . 8x8 4 sublevels -> 7x7 2 sublevels => driver dependent, On NV seems to be 4x4 subrect
+     * copied to 7x7.
+     *
+     * From these, the proposal is:
+     * . Different formats -> use util_format_translate to translate if possible for surfaces.
+     * Accept ARGB/XRGB for Volumes. Do nothing for the other combinations
+     * . First level copied -> the first level such that src is smaller or equal to dst first level
+     * . number of levels copied -> as long as it fits and textures have levels
+     * That should satisfy the constraints (and instead of crashing for some cases we return D3D_OK)
+     */
+
+    last_src_level = (srcb->base.usage & D3DUSAGE_AUTOGENMIPMAP) ? 0 : srcb->base.info.last_level;
+    last_dst_level = (dstb->base.usage & D3DUSAGE_AUTOGENMIPMAP) ? 0 : dstb->base.info.last_level;
+
+    for (m = 0; m <= last_src_level; ++m) {
         unsigned w = u_minify(srcb->base.info.width0, m);
         unsigned h = u_minify(srcb->base.info.height0, m);
         unsigned d = u_minify(srcb->base.info.depth0, m);
 
-        if (w == dstb->base.info.width0 &&
-            h == dstb->base.info.height0 &&
-            d == dstb->base.info.depth0)
+        if (w <= dstb->base.info.width0 &&
+            h <= dstb->base.info.height0 &&
+            d <= dstb->base.info.depth0)
             break;
     }
-    user_assert(m <= srcb->base.info.last_level, D3DERR_INVALIDCALL);
+    user_assert(m <= last_src_level, D3D_OK);
 
-    last_level = MIN2(last_level, srcb->base.info.last_level - m);
+    last_dst_level = MIN2(srcb->base.info.last_level - m, last_dst_level);
 
     if (dstb->base.type == D3DRTYPE_TEXTURE) {
         struct NineTexture9 *dst = NineTexture9(dstb);
@@ -1375,7 +1388,7 @@ NineDevice9_UpdateTexture( struct NineDevice9 *This,
         for (l = 0; l < m; ++l)
             rect_minify_inclusive(&rect);
 
-        for (l = 0; l <= last_level; ++l, ++m) {
+        for (l = 0; l <= last_dst_level; ++l, ++m) {
             fit_rect_format_inclusive(dst->base.base.info.format,
                                       &rect,
                                       dst->surfaces[l]->desc.Width,
@@ -1402,7 +1415,7 @@ NineDevice9_UpdateTexture( struct NineDevice9 *This,
             for (l = 0; l < m; ++l)
                 rect_minify_inclusive(&rect);
 
-            for (l = 0; l <= last_level; ++l, ++m) {
+            for (l = 0; l <= last_dst_level; ++l, ++m) {
                 fit_rect_format_inclusive(dst->base.base.info.format,
                                           &rect,
                                           dst->surfaces[l * 6 + z]->desc.Width,
@@ -1423,7 +1436,7 @@ NineDevice9_UpdateTexture( struct NineDevice9 *This,
 
         if (src->dirty_box.width == 0)
             return D3D_OK;
-        for (l = 0; l <= last_level; ++l, ++m)
+        for (l = 0; l <= last_dst_level; ++l, ++m)
             NineVolume9_CopyMemToDefault(dst->volumes[l],
                                          src->volumes[m], 0, 0, 0, NULL);
         u_box_3d(0, 0, 0, 0, 0, 0, &src->dirty_box);
@@ -1714,6 +1727,14 @@ NineDevice9_ColorFill( struct NineDevice9 *This,
         y = pRect->top;
         w = pRect->right - pRect->left;
         h = pRect->bottom - pRect->top;
+        /* Wine tests: */
+        if (compressed_format(surf->desc.Format)) {
+           const unsigned bw = util_format_get_blockwidth(surf->base.info.format);
+           const unsigned bh = util_format_get_blockheight(surf->base.info.format);
+
+           user_assert(!(x % bw) && !(y % bh) && !(w % bw) && !(h % bh),
+                       D3DERR_INVALIDCALL);
+        }
     } else{
         x = 0;
         y = 0;
@@ -1812,7 +1833,7 @@ NineDevice9_SetRenderTarget( struct NineDevice9 *This,
         This->state.scissor.maxx = rt->desc.Width;
         This->state.scissor.maxy = rt->desc.Height;
 
-        This->state.changed.group |= NINE_STATE_VIEWPORT | NINE_STATE_SCISSOR;
+        This->state.changed.group |= NINE_STATE_VIEWPORT | NINE_STATE_SCISSOR | NINE_STATE_MULTISAMPLE;
     }
 
     if (This->state.rt[i] != NineSurface9(pRenderTarget)) {
@@ -1994,7 +2015,7 @@ NineDevice9_Clear( struct NineDevice9 *This,
     for (i = 0; i < This->caps.NumSimultaneousRTs; ++i) {
         rt = This->state.rt[i];
         if (!rt || rt->desc.Format == D3DFMT_NULL ||
-            !(Flags & D3DCLEAR_TARGET))
+            !(bufs & PIPE_CLEAR_COLOR))
             continue; /* save space, compiler should hoist this */
         cbuf = NineSurface9_GetSurface(rt, sRGB);
         for (r = 0; r < Count; ++r) {
@@ -2019,7 +2040,7 @@ NineDevice9_Clear( struct NineDevice9 *This,
                                       x1, y1, x2 - x1, y2 - y1);
         }
     }
-    if (!(Flags & NINED3DCLEAR_DEPTHSTENCIL))
+    if (!(bufs & PIPE_CLEAR_DEPTHSTENCIL))
         return D3D_OK;
 
     bufs &= PIPE_CLEAR_DEPTHSTENCIL;
@@ -2408,10 +2429,17 @@ NineDevice9_SetRenderState( struct NineDevice9 *This,
     /* NV hack */
     if (unlikely(State == D3DRS_ADAPTIVETESS_Y)) {
         if (Value == D3DFMT_ATOC || (Value == D3DFMT_UNKNOWN && state->rs[NINED3DRS_ALPHACOVERAGE])) {
-            state->rs[NINED3DRS_ALPHACOVERAGE] = (Value == D3DFMT_ATOC);
+            state->rs[NINED3DRS_ALPHACOVERAGE] = (Value == D3DFMT_ATOC) ? 3 : 0;
+            state->rs[NINED3DRS_ALPHACOVERAGE] &= state->rs[D3DRS_ALPHATESTENABLE] ? 3 : 2;
             state->changed.group |= NINE_STATE_BLEND;
             return D3D_OK;
         }
+    }
+    if (unlikely(State == D3DRS_ALPHATESTENABLE && (state->rs[NINED3DRS_ALPHACOVERAGE] & 2))) {
+        DWORD alphacoverage_prev = state->rs[NINED3DRS_ALPHACOVERAGE];
+        state->rs[NINED3DRS_ALPHACOVERAGE] = (Value ? 3 : 2);
+        if (state->rs[NINED3DRS_ALPHACOVERAGE] != alphacoverage_prev)
+            state->changed.group |= NINE_STATE_BLEND;
     }
 
     state->rs[State] = nine_fix_render_state_value(State, Value);
@@ -2734,7 +2762,7 @@ NineDevice9_GetSamplerState( struct NineDevice9 *This,
     if (Sampler >= D3DDMAPSAMPLER)
         Sampler = Sampler - D3DDMAPSAMPLER + NINE_MAX_SAMPLERS_PS;
 
-    *pValue = This->state.samp[Sampler][Type];
+    *pValue = This->state.samp_advertised[Sampler][Type];
     return D3D_OK;
 }
 
@@ -2757,8 +2785,11 @@ NineDevice9_SetSamplerState( struct NineDevice9 *This,
     if (Sampler >= D3DDMAPSAMPLER)
         Sampler = Sampler - D3DDMAPSAMPLER + NINE_MAX_SAMPLERS_PS;
 
-    if (state->samp[Sampler][Type] != Value || unlikely(This->is_recording)) {
-        state->samp[Sampler][Type] = Value;
+    if (state->samp_advertised[Sampler][Type] != Value || unlikely(This->is_recording)) {
+        /* Contrary to render states, old value is kept if new value is wrong (except intel + Value == 0) */
+        if (likely(nine_check_sampler_state_value(Type, Value)))
+            state->samp[Sampler][Type] = Value;
+        state->samp_advertised[Sampler][Type] = Value;
         state->changed.group |= NINE_STATE_SAMPLER;
         state->changed.sampler[Sampler] |= 1 << Type;
     }
@@ -3650,8 +3681,7 @@ NineDevice9_SetIndices( struct NineDevice9 *This,
  */
 HRESULT NINE_WINAPI
 NineDevice9_GetIndices( struct NineDevice9 *This,
-                        IDirect3DIndexBuffer9 **ppIndexData /*,
-                        UINT *pBaseVertexIndex */ )
+                        IDirect3DIndexBuffer9 **ppIndexData)
 {
     user_assert(ppIndexData, D3DERR_INVALIDCALL);
     nine_reference_set(ppIndexData, This->state.idxbuf);

@@ -129,7 +129,7 @@ static void
 util_set_interleaved_vertex_elements(struct cso_context *cso,
                                      unsigned num_elements)
 {
-   unsigned i;
+   int i;
    struct pipe_vertex_element *velem =
       calloc(1, num_elements * sizeof(struct pipe_vertex_element));
 
@@ -205,7 +205,7 @@ util_probe_rect_rgba_multi(struct pipe_context *ctx, struct pipe_resource *tex,
    struct pipe_transfer *transfer;
    void *map;
    float *pixels = malloc(w * h * 4 * sizeof(float));
-   unsigned x,y,e,c;
+   int x,y,e,c;
    bool pass = true;
 
    map = pipe_transfer_map(ctx, tex, 0, 0, PIPE_TRANSFER_READ,
@@ -424,7 +424,7 @@ null_constant_buffer(struct pipe_context *ctx)
       struct tgsi_token tokens[1000];
       struct pipe_shader_state state = {tokens};
 
-      if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
+      if (!tgsi_text_translate(text, tokens, Elements(tokens))) {
          puts("Can't compile a fragment shader.");
          util_report_result(FAIL);
          return;

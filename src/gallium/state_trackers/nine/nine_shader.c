@@ -1149,8 +1149,7 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
             break;
         case 2:
             if (ureg_dst_is_undef(tx->regs.oPts))
-                tx->regs.oPts =
-                    ureg_saturate(ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_PSIZE, 0));
+                tx->regs.oPts = ureg_DECL_temporary(tx->ureg);
             dst = tx->regs.oPts;
             break;
         default:
@@ -2041,19 +2040,30 @@ DECL_SPECIAL(DCL)
             if (sem.usage == D3DDECLUSAGE_POSITIONT)
                 tx->info->position_t = TRUE;
             assert(sem.reg.idx < Elements(tx->regs.o));
+            assert(ureg_dst_is_undef(tx->regs.o[sem.reg.idx]) && "Nine doesn't support yet packing");
             tx->regs.o[sem.reg.idx] = ureg_DECL_output_masked(
                 ureg, tgsi.Name, tgsi.Index, sem.reg.mask, 0, 1);
 
-            if (tgsi.Name == TGSI_SEMANTIC_PSIZE)
+            if (tgsi.Name == TGSI_SEMANTIC_PSIZE) {
+                tx->regs.o[sem.reg.idx] = ureg_DECL_temporary(ureg);
                 tx->regs.oPts = tx->regs.o[sem.reg.idx];
+            }
         }
     } else {
         if (is_input && tx->version.major >= 3) {
             unsigned interp_location = 0;
             /* SM3 only, SM2 input semantic determined by file */
             assert(sem.reg.idx < Elements(tx->regs.v));
+            assert(ureg_src_is_undef(tx->regs.v[sem.reg.idx]) && "Nine doesn't support yet packing");
+            /* PositionT and tessfactor forbidden */
+            if (sem.usage == D3DDECLUSAGE_POSITIONT || sem.usage == D3DDECLUSAGE_TESSFACTOR)
+                return D3DERR_INVALIDCALL;
 
             if (tgsi.Name == TGSI_SEMANTIC_POSITION) {
+                /* Position0 is forbidden (likely because vPos already does that) */
+                if (sem.usage == D3DDECLUSAGE_POSITION)
+                    return D3DERR_INVALIDCALL;
+                /* Following code is for depth */
                 tx->regs.v[sem.reg.idx] = nine_get_position_input(tx);
                 return D3D_OK;
             }
@@ -2997,7 +3007,7 @@ sm1_parse_get_param(struct shader_translator *tx, DWORD *reg, DWORD *rel)
 static void
 sm1_parse_dst_param(struct sm1_dst_param *dst, DWORD tok)
 {
-    uint8_t shift;
+    int8_t shift;
     dst->file =
         (tok & D3DSP_REGTYPE_MASK)  >> D3DSP_REGTYPE_SHIFT |
         (tok & D3DSP_REGTYPE_MASK2) >> D3DSP_REGTYPE_SHIFT2;
@@ -3007,7 +3017,7 @@ sm1_parse_dst_param(struct sm1_dst_param *dst, DWORD tok)
     dst->mask = (tok & NINED3DSP_WRITEMASK_MASK) >> NINED3DSP_WRITEMASK_SHIFT;
     dst->mod = (tok & D3DSP_DSTMOD_MASK) >> D3DSP_DSTMOD_SHIFT;
     shift = (tok & D3DSP_DSTSHIFT_MASK) >> D3DSP_DSTSHIFT_SHIFT;
-    dst->shift = (shift & 0x8) ? -(shift & 0x7) : shift & 0x7;
+    dst->shift = (shift & 0x7) - (shift & 0x8);
 }
 
 static void
@@ -3111,6 +3121,7 @@ static void
 sm1_parse_instruction(struct shader_translator *tx)
 {
     struct sm1_instruction *insn = &tx->insn;
+    HRESULT hr;
     DWORD tok;
     struct sm1_op_info *info = NULL;
     unsigned i;
@@ -3175,11 +3186,13 @@ sm1_parse_instruction(struct shader_translator *tx)
     sm1_instruction_check(insn);
 
     if (info->handler)
-        info->handler(tx);
+        hr = info->handler(tx);
     else
-       NineTranslateInstruction_Generic(tx);
+        hr = NineTranslateInstruction_Generic(tx);
     tx_apply_dst0_modifiers(tx);
 
+    if (hr != D3D_OK)
+        tx->failure = TRUE;
     tx->num_scratch = 0; /* reset */
 
     TOKEN_JUMP(tx);
@@ -3225,6 +3238,8 @@ tx_ctor(struct shader_translator *tx, struct nine_shader_info *info)
     tx->regs.vFace = ureg_src_undef();
     for (i = 0; i < Elements(tx->regs.o); ++i)
         tx->regs.o[i] = ureg_dst_undef();
+    for (i = 0; i < Elements(tx->regs.v); ++i)
+        tx->regs.v[i] = ureg_src_undef();
     for (i = 0; i < Elements(tx->regs.oCol); ++i)
         tx->regs.oCol[i] = ureg_dst_undef();
     for (i = 0; i < Elements(tx->regs.vC); ++i)
@@ -3414,10 +3429,14 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     if (info->position_t)
         ureg_property(tx->ureg, TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION, TRUE);
 
-    ureg_END(tx->ureg);
-
-    if (IS_VS && !ureg_dst_is_undef(tx->regs.oPts))
+    if (IS_VS && !ureg_dst_is_undef(tx->regs.oPts)) {
+        struct ureg_dst oPts = ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_PSIZE, 0);
+        ureg_MAX(tx->ureg, tx->regs.oPts, ureg_src(tx->regs.oPts), ureg_imm1f(tx->ureg, info->point_size_min));
+        ureg_MIN(tx->ureg, oPts, ureg_src(tx->regs.oPts), ureg_imm1f(tx->ureg, info->point_size_max));
         info->point_size = TRUE;
+    }
+
+    ureg_END(tx->ureg);
 
     /* record local constants */
     if (tx->num_lconstf && tx->indirect_const_access) {

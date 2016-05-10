@@ -45,7 +45,7 @@ boolean
 util_format_is_float(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
-   int i;
+   unsigned i;
 
    assert(desc);
    if (!desc) {
@@ -53,7 +53,7 @@ util_format_is_float(enum pipe_format format)
    }
 
    i = util_format_get_first_non_void_channel(format);
-   if (i < 0) {
+   if (i == -1) {
       return FALSE;
    }
 
@@ -735,6 +735,40 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       FREE(tmp_row);
+   }
+   return TRUE;
+}
+
+boolean
+util_format_translate_3D(enum pipe_format dst_format,
+                         void *dst, unsigned dst_stride,
+                         unsigned dst_slice_stride,
+                         unsigned dst_x, unsigned dst_y,
+                         unsigned dst_z,
+                         enum pipe_format src_format,
+                         const void *src, unsigned src_stride,
+                         unsigned src_slice_stride,
+                         unsigned src_x, unsigned src_y,
+                         unsigned src_z, unsigned width,
+                         unsigned height, unsigned depth)
+{
+   uint8_t *dst_layer;
+   const uint8_t *src_layer;
+   unsigned z;
+   dst_layer = dst;
+   src_layer = src;
+   dst_layer += dst_z * dst_slice_stride;
+   src_layer += src_z * src_slice_stride;
+   for (z = 0; z < depth; ++z) {
+      if (!util_format_translate(dst_format, dst_layer, dst_stride,
+                                 dst_x, dst_y,
+                                 src_format, src_layer, src_stride,
+                                 src_x, src_y,
+                                 width, height))
+          return FALSE;
+
+      dst_layer += dst_slice_stride;
+      src_layer += src_slice_stride;
    }
    return TRUE;
 }
