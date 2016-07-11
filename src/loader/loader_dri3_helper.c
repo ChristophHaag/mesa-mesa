@@ -145,6 +145,7 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
    draw->drawable = drawable;
    draw->dri_screen = dri_screen;
    draw->is_different_gpu = is_different_gpu;
+   draw->is_different_gpu = 1;
 
    draw->have_back = 0;
    draw->have_fake_front = 0;
