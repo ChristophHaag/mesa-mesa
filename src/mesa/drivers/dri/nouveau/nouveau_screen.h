@@ -36,6 +36,7 @@ struct nouveau_screen {
 	struct nouveau_drm *drm;
 	struct nouveau_device *device;
 	const struct nouveau_driver *driver;
+	struct renderonly *ro;
 };
 
 #endif
