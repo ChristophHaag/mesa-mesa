@@ -36,6 +36,8 @@
 #include <inttypes.h>
 #include <signal.h>
 #include <stdio.h>
+#include <string.h>
+#include <fcntl.h>
 
 #include "hud/hud_context.h"
 #include "hud/hud_private.h"
@@ -1824,6 +1826,17 @@ hud_create(struct cso_context *cso, struct hud_context *share)
    unsigned signo = debug_get_num_option("GALLIUM_HUD_TOGGLE_SIGNAL", 0);
    static boolean sig_handled = FALSE;
    struct sigaction action = {};
+
+   if (env && *env) {
+      int pid = (int) getpid();
+      char pidname [100];
+      snprintf(pidname, 100, "%d", pid);
+      const char *basename = "/tmp/hud";
+      filename = malloc(strlen(pidname)+strlen(basename)+1);
+      strcpy(filename, basename);
+      strcat(filename, pidname);
+      open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0777);
+   }
 #endif
    huds_visible = debug_get_bool_option("GALLIUM_HUD_VISIBLE", TRUE);
 
@@ -1926,6 +1939,8 @@ hud_create(struct cso_context *cso, struct hud_context *share)
 void
 hud_destroy(struct hud_context *hud, struct cso_context *cso)
 {
+   if (filename)
+      unlink(filename);
    if (!cso || hud->record_pipe == cso_get_pipe_context(cso))
       hud_unset_record_context(hud);
 
