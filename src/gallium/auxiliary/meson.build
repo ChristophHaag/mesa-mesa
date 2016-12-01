@@ -117,6 +117,7 @@ files_libgallium = files(
   'hud/hud_sensors_temp.c',
   'hud/hud_driver_query.c',
   'hud/hud_fps.c',
+  'hud/hud_frametime.c',
   'hud/hud_private.h',
   'indices/u_indices.h',
   'indices/u_indices_priv.h',

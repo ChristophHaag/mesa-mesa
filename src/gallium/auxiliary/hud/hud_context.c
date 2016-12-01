@@ -1248,14 +1248,16 @@ hud_parse_env_var(struct hud_context *hud, struct pipe_screen *screen,
       /* IF YOU CHANGE THIS, UPDATE print_help! */
       if (strcmp(name, "fps") == 0) {
          hud_fps_graph_install(pane);
-      }
-      if (strcmp(name, "low-fps") == 0) {
+      } else if (strcmp(name, "low-fps") == 0) {
          hud_low_fps_graph_install(pane);
+      } else if (strncmp("frametime_", name, strlen("frametime_")) == 0) {
+         //TODO: check if user actually entered a number after frametime_
+         int fps = atoi(strrchr(name, '_') + 1);
+         hud_frametime_X_graph_install(pane, fps);
       }
       else if (strcmp(name, "frametime") == 0) {
          hud_frametime_graph_install(pane);
-      }
-      else if (strcmp(name, "cpu") == 0) {
+      } else if (strcmp(name, "cpu") == 0) {
          hud_cpu_graph_install(pane, ALL_CPUS);
       }
       else if (sscanf(name, "cpu%u%s", &i, s) == 1) {
@@ -1568,6 +1570,7 @@ print_help(struct pipe_screen *screen)
    puts("    fps");
    puts("    low-fps");
    puts("    frametime");
+   puts("    frametime_X");
    puts("    cpu");
 
    for (i = 0; i < num_cpus; i++)
