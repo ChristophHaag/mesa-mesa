@@ -105,8 +105,6 @@ hud_fps_graph_install(struct hud_pane *pane)
    }
    struct fps_info *info = gr->query_data;
    info->frametime = false;
-
-   struct fps_info *info = gr->query_data;
    info->low_fps = false;
 
    gr->query_new_value = query_fps;
