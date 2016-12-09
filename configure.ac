@@ -838,7 +838,7 @@ fi
 
 dnl pthread-stubs is mandatory on targets where it exists
 case "$host_os" in
-cygwin* )
+cygwin* | linux* )
     pthread_stubs_possible="no"
     ;;
 * )
