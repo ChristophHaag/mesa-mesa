@@ -108,6 +108,71 @@ static char *loader_get_dri_config_device_id(void)
 }
 #endif
 
+/*
+ * For all devices that do not support rendering, try to find a different
+ * device that will.
+ *
+ * Note that the absence of a render node doesn't technically imply that
+ * the device can't render, but in practice this should work out fine.
+ */
+static int drm_detect_prime_fd(int default_fd, int *different_device)
+{
+   int err, fd = -ENODEV;
+   drmDevicePtr device;
+
+   err = drmGetDevice(default_fd, &device);
+   if (err < 0)
+      goto err;
+
+   if ((device->available_nodes & (1 << DRM_NODE_RENDER)) == 0) {
+      unsigned int num_devices, i;
+      drmDevicePtr *devices;
+
+      err = drmGetDevices(NULL, 0);
+      if (err < 0)
+         goto err;
+
+      num_devices = err;
+
+      devices = calloc(num_devices, sizeof(drmDevicePtr));
+      if (!devices)
+         goto err;
+
+      err = drmGetDevices(devices, num_devices);
+      if (err < 0) {
+         free(devices);
+         goto err;
+      }
+
+      num_devices = err;
+
+      for (i = 0; i < num_devices; i++) {
+         if (devices[i]->available_nodes & (1 << DRM_NODE_RENDER)) {
+            fd = loader_open_device(devices[i]->nodes[DRM_NODE_RENDER]);
+            if (fd < 0) {
+               fd = -errno;
+               continue;
+            }
+
+            close(default_fd);
+            break;
+         }
+      }
+
+      drmFreeDevices(devices, num_devices);
+      free(devices);
+   }
+
+err:
+   if (fd < 0) {
+      *different_device = 0;
+      return default_fd;
+   }
+
+   *different_device = 1;
+   return fd;
+}
+
 static char *drm_construct_id_path_tag(drmDevicePtr device)
 {
 /* Length of "pci-xxxx_xx_xx_x\0" */
@@ -170,10 +235,8 @@ int loader_get_user_preferred_fd(int default_fd, int *different_device)
       prime = loader_get_dri_config_device_id();
 #endif
 
-   if (prime == NULL) {
-      *different_device = 0;
-      return default_fd;
-   }
+   if (prime == NULL || *prime == '\0')
+      return drm_detect_prime_fd(default_fd, different_device);
 
    default_tag = drm_get_id_path_tag_for_fd(default_fd);
    if (default_tag == NULL)
