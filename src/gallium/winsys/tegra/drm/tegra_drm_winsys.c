@@ -29,6 +29,8 @@
 #include "nouveau/drm/nouveau_drm_public.h"
 #include "renderonly/renderonly.h"
 
+#include <unistd.h>
+#include <fcntl.h>
 #include <libdrm/tegra_drm.h>
 #include <xf86drm.h>
 
@@ -60,7 +62,13 @@ struct pipe_screen *tegra_drm_screen_create(int fd)
    struct renderonly ro = {
       .create_for_resource = tegra_create_with_tiling_for_resource,
       .kms_fd = fd,
-      .gpu_fd = drmOpenWithType("nouveau", NULL, DRM_NODE_RENDER),
+      /* Strangely the X modesetting driver will fail to start *unless*
+      * /dev/dri/card1 is opened directly. Even calling drmOpenWithType() with
+      * DRM_NODE_PRIMARY will not work (although for a different reason). This is
+      * strange since this FD is not supposed to be used directly by X.
+      */
+      //.gpu_fd = drmOpenWithType("nouveau", NULL, DRM_NODE_RENDER),
+      .gpu_fd = open("/dev/dri/card1", O_RDWR),
    };
 
    if (ro.gpu_fd < 0)
