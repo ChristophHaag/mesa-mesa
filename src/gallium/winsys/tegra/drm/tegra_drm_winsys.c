@@ -68,7 +68,7 @@ struct pipe_screen *tegra_drm_screen_create(int fd)
       * strange since this FD is not supposed to be used directly by X.
       */
       //.gpu_fd = drmOpenWithType("nouveau", NULL, DRM_NODE_RENDER),
-      .gpu_fd = open("/dev/dri/card1", O_RDWR),
+      .gpu_fd = open("/dev/dri/renderD128", O_RDWR),
    };
 
    if (ro.gpu_fd < 0)
