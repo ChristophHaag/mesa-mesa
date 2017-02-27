@@ -131,9 +131,9 @@ struct radeon_bo_metadata {
 	uint32_t                metadata[64];
 };
 
+uint32_t syncobj_handle;
 struct radeon_winsys_bo;
 struct radeon_winsys_fence;
-struct radeon_winsys_sem;
 
 struct radeon_winsys {
 	void (*destroy)(struct radeon_winsys *ws);
@@ -191,9 +191,9 @@ struct radeon_winsys {
 			 unsigned cs_count,
 			 struct radeon_winsys_cs *initial_preamble_cs,
 			 struct radeon_winsys_cs *continue_preamble_cs,
-			 struct radeon_winsys_sem **wait_sem,
+			 void *wait_sem,
 			 unsigned wait_sem_count,
-			 struct radeon_winsys_sem **signal_sem,
+			 void *signal_sem,
 			 unsigned signal_sem_count,
 			 bool can_patch,
 			 struct radeon_winsys_fence *fence);
