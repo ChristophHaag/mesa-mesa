@@ -1249,6 +1249,9 @@ hud_parse_env_var(struct hud_context *hud, struct pipe_screen *screen,
       if (strcmp(name, "fps") == 0) {
          hud_fps_graph_install(pane);
       }
+      if (strcmp(name, "low-fps") == 0) {
+         hud_low_fps_graph_install(pane);
+      }
       else if (strcmp(name, "frametime") == 0) {
          hud_frametime_graph_install(pane);
       }
@@ -1563,6 +1566,7 @@ print_help(struct pipe_screen *screen)
    puts("");
    puts("  Available names:");
    puts("    fps");
+   puts("    low-fps");
    puts("    frametime");
    puts("    cpu");
 
