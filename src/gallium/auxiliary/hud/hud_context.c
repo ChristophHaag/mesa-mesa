@@ -1150,6 +1150,9 @@ hud_parse_env_var(struct hud_context *hud, const char *env)
       if (strcmp(name, "fps") == 0) {
          hud_fps_graph_install(pane);
       }
+      if (strcmp(name, "low-fps") == 0) {
+         hud_low_fps_graph_install(pane);
+      }
       else if (strcmp(name, "cpu") == 0) {
          hud_cpu_graph_install(pane, ALL_CPUS);
       }
@@ -1454,6 +1457,7 @@ print_help(struct pipe_screen *screen)
    puts("");
    puts("  Available names:");
    puts("    fps");
+   puts("    low-fps");
    puts("    cpu");
 
    for (i = 0; i < num_cpus; i++)
