@@ -1494,6 +1494,10 @@ fi
 AC_SUBST([GL_LIB])
 AC_SUBST([OSMESA_LIB])
 
+# Check for RandR leases
+PKG_CHECK_MODULES([RANDRPROTO], [randrproto >= 1.6.0],
+                  [have_xlease=yes], [have_xlease=no])
+
 # Check for libdrm
 PKG_CHECK_MODULES([LIBDRM], [libdrm >= $LIBDRM_REQUIRED],
                   [have_libdrm=yes], [have_libdrm=no])
@@ -1533,6 +1537,7 @@ AM_CONDITIONAL(HAVE_APPLEDRI, test "x$enable_dri" = xyes -a "x$dri_platform" = x
 AM_CONDITIONAL(HAVE_LMSENSORS, test "x$enable_lmsensors" = xyes )
 AM_CONDITIONAL(HAVE_GALLIUM_EXTRA_HUD, test "x$enable_gallium_extra_hud" = xyes )
 AM_CONDITIONAL(HAVE_WINDOWSDRI, test "x$enable_dri" = xyes -a "x$dri_platform" = xwindows )
+AM_CONDITIONAL(HAVE_XLEASE, test "x$have_xlease" = xyes )
 
 AC_ARG_ENABLE([shared-glapi],
     [AS_HELP_STRING([--enable-shared-glapi],
@@ -1832,9 +1837,16 @@ if test x"$enable_dri3" = xyes; then
     PKG_CHECK_MODULES([XCB_DRI3], [$dri3_modules])
 fi
 
+if test x"$have_xlease" = xyes; then
+    DEFINES="$DEFINES -DHAVE_XLEASE"
+    randr_modules="x11-xcb xcb-randr"
+    PKG_CHECK_MODULES([XCB_RANDR], [$randr_modules])
+fi
+
 AM_CONDITIONAL(HAVE_PLATFORM_X11, echo "$platforms" | grep -q 'x11')
 AM_CONDITIONAL(HAVE_PLATFORM_WAYLAND, echo "$platforms" | grep -q 'wayland')
 AM_CONDITIONAL(HAVE_PLATFORM_DRM, echo "$platforms" | grep -q 'drm')
+AM_CONDITIONAL(HAVE_PLATFORM_DISPLAY, echo "$platforms" | grep -q 'drm')
 AM_CONDITIONAL(HAVE_PLATFORM_SURFACELESS, echo "$platforms" | grep -q 'surfaceless')
 AM_CONDITIONAL(HAVE_PLATFORM_ANDROID, echo "$platforms" | grep -q 'android')
 

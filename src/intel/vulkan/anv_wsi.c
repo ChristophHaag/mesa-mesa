@@ -39,7 +39,8 @@ anv_init_wsi(struct anv_physical_device *physical_device)
    return wsi_device_init(&physical_device->wsi_device,
                           anv_physical_device_to_handle(physical_device),
                           anv_wsi_proc_addr,
-                          &physical_device->instance->alloc);
+                          &physical_device->instance->alloc,
+                          physical_device->local_fd);
 }
 
 void
