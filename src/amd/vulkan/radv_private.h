@@ -1749,8 +1749,17 @@ void radv_meta_push_descriptor_set(struct radv_cmd_buffer *cmd_buffer,
 void radv_initialize_dcc(struct radv_cmd_buffer *cmd_buffer,
 			 struct radv_image *image, uint32_t value);
 
+enum radv_fence_type {
+	RADV_FENCE_TYPE_WINSYS = 0,
+	RADV_FENCE_TYPE_WSI = 1
+};
+
 struct radv_fence {
-	struct radeon_winsys_fence *fence;
+	enum radv_fence_type type;
+	union {
+		struct radeon_winsys_fence      *fence;
+		struct wsi_fence                *fence_wsi;
+	};
 	bool submitted;
 	bool signalled;
 
