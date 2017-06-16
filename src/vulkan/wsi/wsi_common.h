@@ -48,6 +48,15 @@ struct wsi_memory_allocate_info {
     bool implicit_sync;
 };
 
+struct wsi_fence {
+   VkDevice                     device;
+   struct wsi_device            *wsi_device;
+   VkDisplayKHR                 display;
+   const VkAllocationCallbacks  *alloc;
+   bool                         (*wait)(struct wsi_fence *fence, bool absolute, uint64_t timeout);
+   void                         (*destroy)(struct wsi_fence *fence);
+};
+
 struct wsi_interface;
 
 #define VK_ICD_WSI_PLATFORM_MAX 6
