@@ -66,6 +66,15 @@ struct wsi_format_modifier_properties_list {
    struct wsi_format_modifier_properties *modifier_properties;
 };
 
+struct wsi_fence {
+   VkDevice                     device;
+   const struct wsi_device      *wsi_device;
+   VkDisplayKHR                 display;
+   const VkAllocationCallbacks  *alloc;
+   bool                         (*wait)(struct wsi_fence *fence, bool absolute, uint64_t timeout);
+   void                         (*destroy)(struct wsi_fence *fence);
+};
+
 struct wsi_interface;
 
 #define VK_ICD_WSI_PLATFORM_MAX 6
