@@ -320,6 +320,10 @@ anv_fence_impl_cleanup(struct anv_device *device,
    case ANV_FENCE_TYPE_SYNCOBJ:
       anv_gem_syncobj_destroy(device, impl->syncobj);
       return;
+
+   case ANV_FENCE_TYPE_WSI:
+      impl->fence_wsi->destroy(impl->fence_wsi);
+      return;
    }
 
    unreachable("Invalid fence type");
@@ -465,11 +469,32 @@ anv_wait_for_syncobj_fences(struct anv_device *device,
    uint32_t *syncobjs = vk_zalloc(&device->alloc,
                                   sizeof(*syncobjs) * fenceCount, 8,
                                   VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+   uint32_t syncobjCount = 0;
    if (!syncobjs)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
    for (uint32_t i = 0; i < fenceCount; i++) {
       ANV_FROM_HANDLE(anv_fence, fence, pFences[i]);
+
+      if (fence->permanent.type == ANV_FENCE_TYPE_WSI) {
+         struct anv_fence_impl *impl = &fence->permanent;
+         bool expired = impl->fence_wsi->wait(impl->fence_wsi, true, _timeout);
+
+         VkResult result;
+
+         if (!expired) {
+            result = VK_TIMEOUT;
+            goto done;
+         }
+         if (!waitAll) {
+            result = VK_SUCCESS;
+            goto done;
+         }
+         continue;
+      done:
+         vk_free(&device->alloc, syncobjs);
+         return result;
+      }
       assert(fence->permanent.type == ANV_FENCE_TYPE_SYNCOBJ);
 
       struct anv_fence_impl *impl =
@@ -477,7 +502,7 @@ anv_wait_for_syncobj_fences(struct anv_device *device,
          &fence->temporary : &fence->permanent;
 
       assert(impl->type == ANV_FENCE_TYPE_SYNCOBJ);
-      syncobjs[i] = impl->syncobj;
+      syncobjs[syncobjCount++] = impl->syncobj;
    }
 
    int64_t abs_timeout_ns = 0;
@@ -499,7 +524,7 @@ anv_wait_for_syncobj_fences(struct anv_device *device,
     */
    int ret;
    do {
-      ret = anv_gem_syncobj_wait(device, syncobjs, fenceCount,
+      ret = anv_gem_syncobj_wait(device, syncobjs, syncobjCount,
                                  abs_timeout_ns, waitAll);
    } while (ret == -1 && errno == ETIME && gettime_ns() < abs_timeout_ns);
 
@@ -545,13 +570,32 @@ anv_wait_for_bo_fences(struct anv_device *device,
       for (uint32_t i = 0; i < fenceCount; i++) {
          ANV_FROM_HANDLE(anv_fence, fence, pFences[i]);
 
-         /* This function assumes that all fences are BO fences and that they
-          * have no temporary state.  Since BO fences will never be exported,
-          * this should be a safe assumption.
+         /* This function assumes that all fences have no temporary
+          * state.Since BO fences will never be exported, this should be a
+          * safe assumption.
           */
-         assert(fence->permanent.type == ANV_FENCE_TYPE_BO);
          assert(fence->temporary.type == ANV_FENCE_TYPE_NONE);
          struct anv_fence_impl *impl = &fence->permanent;
+
+         /* This function assumes that all fences are either BO fences or WSI
+          * fences
+          */
+
+         if (impl->type == ANV_FENCE_TYPE_WSI) {
+            bool expired = impl->fence_wsi->wait(impl->fence_wsi, true, timeout);
+
+            if (!expired) {
+               result = VK_TIMEOUT;
+               goto done;
+            }
+            if (!waitAll) {
+               result = VK_SUCCESS;
+               goto done;
+            }
+            continue;
+         }
+
+         assert(impl->type == ANV_FENCE_TYPE_BO);
 
          switch (impl->bo.state) {
          case ANV_BO_FENCE_STATE_RESET:
@@ -610,7 +654,8 @@ anv_wait_for_bo_fences(struct anv_device *device,
          uint32_t now_pending_fences = 0;
          for (uint32_t i = 0; i < fenceCount; i++) {
             ANV_FROM_HANDLE(anv_fence, fence, pFences[i]);
-            if (fence->permanent.bo.state == ANV_BO_FENCE_STATE_RESET)
+            if (fence->permanent.type == ANV_FENCE_TYPE_BO &&
+                fence->permanent.bo.state == ANV_BO_FENCE_STATE_RESET)
                now_pending_fences++;
          }
          assert(now_pending_fences <= pending_fences);
