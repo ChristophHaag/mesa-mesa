@@ -1997,6 +1997,7 @@ enum anv_fence_type {
    ANV_FENCE_TYPE_NONE = 0,
    ANV_FENCE_TYPE_BO,
    ANV_FENCE_TYPE_SYNCOBJ,
+   ANV_FENCE_TYPE_WSI,
 };
 
 enum anv_bo_fence_state {
@@ -2031,6 +2032,9 @@ struct anv_fence_impl {
 
       /** DRM syncobj handle for syncobj-based fences */
       uint32_t syncobj;
+
+      /** WSI fence */
+      struct wsi_fence *fence_wsi;
    };
 };
 
