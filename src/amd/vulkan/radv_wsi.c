@@ -425,22 +425,42 @@ VkResult radv_GetSwapchainImagesKHR(
 }
 
 VkResult radv_AcquireNextImageKHR(
-	VkDevice                                     device,
+	VkDevice                                     _device,
 	VkSwapchainKHR                               _swapchain,
 	uint64_t                                     timeout,
-	VkSemaphore                                  semaphore,
+	VkSemaphore                                  _semaphore,
 	VkFence                                      _fence,
 	uint32_t*                                    pImageIndex)
 {
 	RADV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
 	RADV_FROM_HANDLE(radv_fence, fence, _fence);
+	RADV_FROM_HANDLE(radv_device, device, _device);
+	RADV_FROM_HANDLE(radv_semaphore, semaphore, _semaphore);
 
-	VkResult result = swapchain->acquire_next_image(swapchain, timeout, semaphore,
+	VkResult result = swapchain->acquire_next_image(swapchain, timeout, _semaphore,
 	                                                pImageIndex);
 
 	if (fence && (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)) {
 		fence->submitted = true;
 		fence->signalled = true;
+	}
+
+	if (semaphore && (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)) {
+		struct radv_queue *queue = device->queues[RADV_QUEUE_GENERAL];
+		struct radeon_winsys_cs *cs = queue->device->empty_cs[queue->queue_family_index];
+		struct radeon_winsys_ctx *ctx = queue->hw_ctx;
+		void *signal_ptr;
+
+		if (semaphore->syncobj)
+			signal_ptr = &semaphore->syncobj;
+		else
+			signal_ptr = &semaphore->sem;
+
+		queue->device->ws->cs_submit(ctx, queue->queue_idx,
+					     &cs,
+					     1, NULL, NULL,
+					     NULL, 0,
+					     signal_ptr, 1, false, NULL);
 	}
 
 	return result;
@@ -452,7 +472,7 @@ VkResult radv_QueuePresentKHR(
 {
 	RADV_FROM_HANDLE(radv_queue, queue, _queue);
 	VkResult result = VK_SUCCESS;
-
+	bool has_syncobj = queue->device->physical_device->rad_info.has_syncobj;
 	const VkPresentRegionsKHR *regions =
 	         vk_find_struct_const(pPresentInfo->pNext, PRESENT_REGIONS_KHR);
 
@@ -461,6 +481,15 @@ VkResult radv_QueuePresentKHR(
 		struct radeon_winsys_cs *cs;
 		const VkPresentRegionKHR *region = NULL;
 		VkResult item_result;
+		void *wait_sem_array = NULL;
+
+		if (pPresentInfo->waitSemaphoreCount) {
+			wait_sem_array = radv_alloc_sem_array(pPresentInfo->waitSemaphoreCount,
+							      pPresentInfo->pWaitSemaphores,
+							      has_syncobj);
+			if (!wait_sem_array)
+				return VK_ERROR_OUT_OF_HOST_MEMORY;
+		}
 
 		assert(radv_device_from_handle(swapchain->device) == queue->device);
 		if (swapchain->fences[0] == VK_NULL_HANDLE) {
@@ -490,7 +519,7 @@ VkResult radv_QueuePresentKHR(
 		queue->device->ws->cs_submit(ctx, queue->queue_idx,
 					     &cs,
 					     1, NULL, NULL,
-					     (struct radeon_winsys_sem **)pPresentInfo->pWaitSemaphores,
+					     wait_sem_array,
 					     pPresentInfo->waitSemaphoreCount, NULL, 0, false, base_fence);
 		fence->submitted = true;
 
@@ -517,6 +546,7 @@ VkResult radv_QueuePresentKHR(
 					   1, &last, true, 1);
 		}
 
+		free(wait_sem_array);
 	}
 
 	return VK_SUCCESS;
