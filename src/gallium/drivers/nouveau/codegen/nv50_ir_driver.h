@@ -175,6 +175,7 @@ struct nv50_ir_prog_info
       bool fp64;                 /* program uses fp64 math */
       bool mul_zero_wins;        /* program wants for x*0 = 0 */
       bool nv50styleSurfaces;    /* generate gX[] access for raw buffers */
+      bool halfPixelCenter;      /* externally set half pixel center state */
       uint16_t texBindBase;      /* base address for tex handles (nve4) */
       uint16_t fbtexBindBase;    /* base address for fbtex handle (nve4) */
       uint16_t suInfoBase;       /* base address for surface info (nve4) */
