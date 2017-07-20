@@ -87,8 +87,11 @@ static unsigned cik_get_num_tile_pipes(struct amdgpu_gpu_info *info)
 static bool has_syncobj(int fd)
 {
 	uint64_t value;
-	if (drmGetCap(fd, DRM_CAP_SYNCOBJ, &value))
+	if (drmGetCap(fd, DRM_CAP_SYNCOBJ, &value)) {
+		printf("check syncobj: false\n");
 		return false;
+	}
+	printf("check syncobj value: %d\n", value);
 	return value ? true : false;
 }
 
