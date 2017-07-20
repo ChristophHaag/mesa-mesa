@@ -151,6 +151,9 @@ _mesa_ClearBufferSubData_sw(struct gl_context *ctx,
                             const GLvoid *clearValue,
                             GLsizeiptr clearValueSize,
                             struct gl_buffer_object *bufObj);
+extern void
+_mesa_bufferstorage_mem(GLenum target, GLsizeiptr size,
+                        const GLvoid *data, GLbitfield flags);
 
 /*
  * API functions
@@ -185,13 +188,24 @@ _mesa_BufferStorage_no_error(GLenum target, GLsizeiptr size,
 void GLAPIENTRY
 _mesa_BufferStorage(GLenum target, GLsizeiptr size, const GLvoid *data,
                     GLbitfield flags);
-
+void GLAPIENTRY
+_mesa_BufferStorageMemEXT(GLenum target, GLsizeiptr size,
+                          GLuint memory, GLuint64 offset);
+void GLAPIENTRY
+_mesa_BufferStorageMemEXT_no_error(GLenum target, GLsizeiptr size,
+                                   GLuint memory, GLuint64 offset);
 void GLAPIENTRY
 _mesa_NamedBufferStorage_no_error(GLuint buffer, GLsizeiptr size,
                                   const GLvoid *data, GLbitfield flags);
 void GLAPIENTRY
 _mesa_NamedBufferStorage(GLuint buffer, GLsizeiptr size, const GLvoid *data,
                          GLbitfield flags);
+void GLAPIENTRY
+_mesa_NamedBufferStorageMemEXT(GLuint buffer, GLsizeiptr size,
+                               GLuint memory, GLuint64 offset);
+void GLAPIENTRY
+_mesa_NamedBufferStorageMemEXT_no_error(GLuint buffer, GLsizeiptr size,
+                                        GLuint memory, GLuint64 offset);
 
 void GLAPIENTRY
 _mesa_BufferData(GLenum target, GLsizeiptr size,

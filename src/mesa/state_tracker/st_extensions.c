@@ -1321,4 +1321,9 @@ void st_init_extensions(struct pipe_screen *screen,
       extensions->ARB_texture_cube_map_array &&
       extensions->ARB_texture_stencil8 &&
       extensions->ARB_texture_multisample;
+
+   if (screen->get_param(screen, PIPE_CAP_MEMOBJ)) {
+      extensions->EXT_memory_object = GL_TRUE;
+      extensions->EXT_memory_object_fd = GL_TRUE;
+   }
 }

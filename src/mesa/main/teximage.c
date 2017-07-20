@@ -5624,11 +5624,13 @@ check_multisample_target(GLuint dims, GLenum target, bool dsa)
 static void
 texture_image_multisample(struct gl_context *ctx, GLuint dims,
                           struct gl_texture_object *texObj,
+                          struct gl_memory_object *memObj,
                           GLenum target, GLsizei samples,
                           GLint internalformat, GLsizei width,
                           GLsizei height, GLsizei depth,
                           GLboolean fixedsamplelocations,
-                          GLboolean immutable, const char *func)
+                          GLboolean immutable, GLuint64 offset,
+                          const char *func)
 {
    struct gl_texture_image *texImage;
    GLboolean sizeOK, dimensionsOK, samplesOK;
@@ -5765,14 +5767,26 @@ texture_image_multisample(struct gl_context *ctx, GLuint dims,
                               samples, fixedsamplelocations);
 
       if (width > 0 && height > 0 && depth > 0) {
-         if (!ctx->Driver.AllocTextureStorage(ctx, texObj, 1,
-                                              width, height, depth)) {
-            /* tidy up the texture image state. strictly speaking,
-             * we're allowed to just leave this in whatever state we
-             * like, but being tidy is good.
-             */
-            _mesa_init_teximage_fields(ctx, texImage,
-                  0, 0, 0, 0, GL_NONE, MESA_FORMAT_NONE);
+         if (memObj) {
+            if (!ctx->Driver.SetTextureStorageForMemoryObject(ctx, texObj, memObj,
+                                                              1,
+                                                              width, height, depth,
+                                                              offset)) {
+
+               _mesa_init_teximage_fields(ctx, texImage,
+                                          0, 0, 0, 0, GL_NONE, MESA_FORMAT_NONE);
+            }
+         }
+         else {
+            if (!ctx->Driver.AllocTextureStorage(ctx, texObj, 1,
+                                                 width, height, depth)) {
+               /* tidy up the texture image state. strictly speaking,
+                * we're allowed to just leave this in whatever state we
+                * like, but being tidy is good.
+                */
+               _mesa_init_teximage_fields(ctx, texImage,
+                                          0, 0, 0, 0, GL_NONE, MESA_FORMAT_NONE);
+            }
          }
       }
 
@@ -5799,9 +5813,9 @@ _mesa_TexImage2DMultisample(GLenum target, GLsizei samples,
    if (!texObj)
       return;
 
-   texture_image_multisample(ctx, 2, texObj, target, samples,
+   texture_image_multisample(ctx, 2, texObj, NULL, target, samples,
                              internalformat, width, height, 1,
-                             fixedsamplelocations, GL_FALSE,
+                             fixedsamplelocations, GL_FALSE, 0,
                              "glTexImage2DMultisample");
 }
 
@@ -5819,9 +5833,9 @@ _mesa_TexImage3DMultisample(GLenum target, GLsizei samples,
    if (!texObj)
       return;
 
-   texture_image_multisample(ctx, 3, texObj, target, samples,
+   texture_image_multisample(ctx, 3, texObj, NULL, target, samples,
                              internalformat, width, height, depth,
-                             fixedsamplelocations, GL_FALSE,
+                             fixedsamplelocations, GL_FALSE, 0,
                              "glTexImage3DMultisample");
 }
 
@@ -5855,9 +5869,9 @@ _mesa_TexStorage2DMultisample(GLenum target, GLsizei samples,
    if (!valid_texstorage_ms_parameters(width, height, 1, samples, 2))
       return;
 
-   texture_image_multisample(ctx, 2, texObj, target, samples,
+   texture_image_multisample(ctx, 2, texObj, NULL, target, samples,
                              internalformat, width, height, 1,
-                             fixedsamplelocations, GL_TRUE,
+                             fixedsamplelocations, GL_TRUE, 0,
                              "glTexStorage2DMultisample");
 }
 
@@ -5877,9 +5891,9 @@ _mesa_TexStorage3DMultisample(GLenum target, GLsizei samples,
    if (!valid_texstorage_ms_parameters(width, height, depth, samples, 3))
       return;
 
-   texture_image_multisample(ctx, 3, texObj, target, samples,
+   texture_image_multisample(ctx, 3, texObj, NULL, target, samples,
                              internalformat, width, height, depth,
-                             fixedsamplelocations, GL_TRUE,
+                             fixedsamplelocations, GL_TRUE, 0,
                              "glTexStorage3DMultisample");
 }
 
@@ -5900,9 +5914,9 @@ _mesa_TextureStorage2DMultisample(GLuint texture, GLsizei samples,
    if (!valid_texstorage_ms_parameters(width, height, 1, samples, 2))
       return;
 
-   texture_image_multisample(ctx, 2, texObj, texObj->Target, samples,
-                             internalformat, width, height, 1,
-                             fixedsamplelocations, GL_TRUE,
+   texture_image_multisample(ctx, 2, texObj, NULL, texObj->Target,
+                             samples, internalformat, width, height, 1,
+                             fixedsamplelocations, GL_TRUE, 0,
                              "glTextureStorage2DMultisample");
 }
 
@@ -5924,8 +5938,26 @@ _mesa_TextureStorage3DMultisample(GLuint texture, GLsizei samples,
    if (!valid_texstorage_ms_parameters(width, height, depth, samples, 3))
       return;
 
-   texture_image_multisample(ctx, 3, texObj, texObj->Target, samples,
+   texture_image_multisample(ctx, 3, texObj, NULL, texObj->Target, samples,
                              internalformat, width, height, depth,
-                             fixedsamplelocations, GL_TRUE,
+                             fixedsamplelocations, GL_TRUE, 0,
                              "glTextureStorage3DMultisample");
+}
+
+void
+_mesa_texture_storage_ms_memory(struct gl_context *ctx, GLuint dims,
+                                struct gl_texture_object *texObj,
+                                struct gl_memory_object *memObj,
+                                GLenum target, GLsizei samples,
+                                GLenum internalFormat, GLsizei width,
+                                GLsizei height, GLsizei depth,
+                                GLboolean fixedSampleLocations,
+                                GLuint64 offset, const char* func)
+{
+   assert(memObj);
+
+   texture_image_multisample(ctx, dims, texObj, memObj, target, samples,
+                             internalFormat, width, height, depth,
+                             fixedSampleLocations, GL_TRUE, offset,
+                             func);
 }
