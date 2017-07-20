@@ -706,7 +706,7 @@ _mesa_texture_storage_memory(struct gl_context *ctx, GLuint dims,
 {
    assert(memObj);
 
-   _mesa_texture_storage(ctx, dims, texObj, memObj, target, levels,
+   texture_storage(ctx, dims, texObj, memObj, target, levels,
                          internalformat, width, height, depth,
                          offset, dsa);
 }
