@@ -425,22 +425,36 @@ VkResult radv_GetSwapchainImagesKHR(
 }
 
 VkResult radv_AcquireNextImageKHR(
-	VkDevice                                     device,
+	VkDevice                                     _device,
 	VkSwapchainKHR                               _swapchain,
 	uint64_t                                     timeout,
-	VkSemaphore                                  semaphore,
+	VkSemaphore                                  _semaphore,
 	VkFence                                      _fence,
 	uint32_t*                                    pImageIndex)
 {
 	RADV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
 	RADV_FROM_HANDLE(radv_fence, fence, _fence);
+	RADV_FROM_HANDLE(radv_device, device, _device);
+	RADV_FROM_HANDLE(radeon_winsys_sem, semaphore, _semaphore);
 
-	VkResult result = swapchain->acquire_next_image(swapchain, timeout, semaphore,
+	VkResult result = swapchain->acquire_next_image(swapchain, timeout, _semaphore,
 	                                                pImageIndex);
 
 	if (fence && (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)) {
 		fence->submitted = true;
 		fence->signalled = true;
+	}
+
+	if (semaphore && (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)) {
+		struct radv_queue *queue = device->queues[RADV_QUEUE_GENERAL];
+		struct radeon_winsys_cs *cs = queue->device->empty_cs[queue->queue_family_index];
+		struct radeon_winsys_ctx *ctx = queue->hw_ctx;
+
+		queue->device->ws->cs_submit(ctx, queue->queue_idx,
+					     &cs,
+					     1, NULL, NULL,
+					     NULL, 0,
+					     &semaphore, 1, false, NULL);
 	}
 
 	return result;
