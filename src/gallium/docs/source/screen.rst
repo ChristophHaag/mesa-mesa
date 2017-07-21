@@ -396,6 +396,7 @@ The integer capabilities:
   ``TGSI_PROPERTY_FS_POST_DEPTH_COVERAGE`` is supported.
 * ``PIPE_CAP_BINDLESS_TEXTURE``: Whether bindless texture operations are
   supported.
+* ``PIPE_CAP_MEMOBJ``: Whether operations on memory objects are supported.
 
 
 .. _pipe_capf:

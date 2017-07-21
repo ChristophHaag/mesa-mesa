@@ -39,6 +39,7 @@
 #include "imports.h"
 #include "context.h"
 #include "bufferobj.h"
+#include "externalobjects.h"
 #include "mtypes.h"
 #include "teximage.h"
 #include "glformats.h"
@@ -1596,9 +1597,12 @@ validate_buffer_storage(struct gl_context *ctx,
 
 static void
 buffer_storage(struct gl_context *ctx, struct gl_buffer_object *bufObj,
-               GLenum target, GLsizeiptr size, const GLvoid *data,
-               GLbitfield flags, const char *func)
+               struct gl_memory_object *memObj, GLenum target,
+               GLsizeiptr size, const GLvoid *data, GLbitfield flags,
+               GLuint64 offset, const char *func)
 {
+   GLboolean err;
+
    /* Unmap the existing buffer.  We'll replace it now.  Not an error. */
    _mesa_buffer_unmap_all_mappings(ctx, bufObj);
 
@@ -1608,9 +1612,18 @@ buffer_storage(struct gl_context *ctx, struct gl_buffer_object *bufObj,
    bufObj->Immutable = GL_TRUE;
    bufObj->MinMaxCacheDirty = true;
 
-   assert(ctx->Driver.BufferData);
-   if (!ctx->Driver.BufferData(ctx, target, size, data, GL_DYNAMIC_DRAW,
-                               flags, bufObj)) {
+   if (memObj) {
+      assert(ctx->Driver.BufferData);
+      err = ctx->Driver.BufferDataMem(ctx, target, size, memObj, offset,
+                                      GL_DYNAMIC_DRAW, bufObj);
+   }
+   else {
+      assert(ctx->Driver.BufferData);
+      err = ctx->Driver.BufferData(ctx, target, size, data, GL_DYNAMIC_DRAW,
+                                   flags, bufObj);
+   }
+
+   if (err) {
       if (target == GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD) {
          /* Even though the interaction between AMD_pinned_memory and
           * glBufferStorage is not described in the spec, Graham Sellers
@@ -1627,11 +1640,16 @@ buffer_storage(struct gl_context *ctx, struct gl_buffer_object *bufObj,
 
 static ALWAYS_INLINE void
 inlined_buffer_storage(GLenum target, GLuint buffer, GLsizeiptr size,
-                       const GLvoid *data, GLbitfield flags, bool dsa,
-                       bool no_error, const char *func)
+                       const GLvoid *data, GLbitfield flags,
+                       GLuint memory, GLuint64 offset,
+                       bool dsa, bool mem, bool no_error, const char *func)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_buffer_object *bufObj;
+   struct gl_memory_object *memObj = NULL;
+
+   if (mem)
+      memObj = _mesa_lookup_memory_object(ctx, memory);
 
    if (dsa) {
       if (no_error) {
@@ -1653,7 +1671,7 @@ inlined_buffer_storage(GLenum target, GLuint buffer, GLsizeiptr size,
    }
 
    if (no_error || validate_buffer_storage(ctx, bufObj, size, flags, func))
-      buffer_storage(ctx, bufObj, target, size, data, flags, func);
+      buffer_storage(ctx, bufObj, memObj, target, size, data, flags, offset, func);
 }
 
 
@@ -1661,8 +1679,8 @@ void GLAPIENTRY
 _mesa_BufferStorage_no_error(GLenum target, GLsizeiptr size,
                              const GLvoid *data, GLbitfield flags)
 {
-   inlined_buffer_storage(target, 0, size, data, flags, false, true,
-                          "glBufferStorage");
+   inlined_buffer_storage(target, 0, size, data, flags, GL_NONE, 0,
+                          false, false, true, "glBufferStorage");
 }
 
 
@@ -1670,10 +1688,25 @@ void GLAPIENTRY
 _mesa_BufferStorage(GLenum target, GLsizeiptr size, const GLvoid *data,
                     GLbitfield flags)
 {
-   inlined_buffer_storage(target, 0, size, data, flags, false, false,
-                          "glBufferStorage");
+   inlined_buffer_storage(target, 0, size, data, flags, GL_NONE, 0,
+                          false, false, false, "glBufferStorage");
 }
 
+void GLAPIENTRY
+_mesa_BufferStorageMemEXT_no_error(GLenum target, GLsizeiptr size,
+                                   GLuint memory, GLuint64 offset)
+{
+   inlined_buffer_storage(target, 0, size, NULL, 0, memory, offset,
+                          false, true, true, "glBufferStorageMemEXT");
+}
+
+void GLAPIENTRY
+_mesa_BufferStorageMemEXT(GLenum target, GLsizeiptr size,
+                          GLuint memory, GLuint64 offset)
+{
+   inlined_buffer_storage(target, 0, size, NULL, 0, memory, offset,
+                          false, true, false, "glBufferStorageMemEXT");
+}
 
 void GLAPIENTRY
 _mesa_NamedBufferStorage_no_error(GLuint buffer, GLsizeiptr size,
@@ -1682,8 +1715,8 @@ _mesa_NamedBufferStorage_no_error(GLuint buffer, GLsizeiptr size,
    /* In direct state access, buffer objects have an unspecified target
     * since they are not required to be bound.
     */
-   inlined_buffer_storage(GL_NONE, buffer, size, data, flags, true, true,
-                          "glNamedBufferStorage");
+   inlined_buffer_storage(GL_NONE, buffer, size, data, flags, GL_NONE, 0,
+                          true, false, true, "glNamedBufferStorage");
 }
 
 
@@ -1694,10 +1727,25 @@ _mesa_NamedBufferStorage(GLuint buffer, GLsizeiptr size, const GLvoid *data,
    /* In direct state access, buffer objects have an unspecified target
     * since they are not required to be bound.
     */
-   inlined_buffer_storage(GL_NONE, buffer, size, data, flags, true, false,
-                          "glNamedBufferStorage");
+   inlined_buffer_storage(GL_NONE, buffer, size, data, flags, GL_NONE, 0,
+                          true, false, false, "glNamedBufferStorage");
 }
 
+void GLAPIENTRY
+_mesa_NamedBufferStorageMemEXT_no_error(GLuint buffer, GLsizeiptr size,
+                                        GLuint memory, GLuint64 offset)
+{
+   inlined_buffer_storage(GL_NONE, buffer, size, GL_NONE, 0, memory, offset,
+                          true, true, true, "glNamedBufferStorageMemEXT");
+}
+
+void GLAPIENTRY
+_mesa_NamedBufferStorageMemEXT(GLuint buffer, GLsizeiptr size,
+                               GLuint memory, GLuint64 offset)
+{
+   inlined_buffer_storage(GL_NONE, buffer, size, GL_NONE, 0, memory, offset,
+                          true, true, false, "glNamedBufferStorageMemEXT");
+}
 
 void
 _mesa_buffer_data(struct gl_context *ctx, struct gl_buffer_object *bufObj,
