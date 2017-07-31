@@ -491,9 +491,8 @@ texture_storage_error(struct gl_context *ctx, GLuint dims,
  * Helper used by _mesa_TexStorage1/2/3D().
  */
 static void
-texstorage_error(GLuint dims, GLenum target, GLsizei levels,
-                 GLenum internalformat, GLsizei width, GLsizei height,
-                 GLsizei depth, const char *caller)
+texstorage(GLuint dims, GLenum target, GLsizei levels, GLenum internalformat,
+           GLsizei width, GLsizei height, GLsizei depth, const char *caller)
 {
    struct gl_texture_object *texObj;
    GET_CURRENT_CONTEXT(ctx);
@@ -579,8 +578,8 @@ void GLAPIENTRY
 _mesa_TexStorage1D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width)
 {
-   texstorage_error(1, target, levels, internalformat, width, 1, 1,
-                    "glTexStorage1D");
+   texstorage(1, target, levels, internalformat, width, 1, 1,
+              "glTexStorage1D");
 }
 
 
@@ -588,8 +587,8 @@ void GLAPIENTRY
 _mesa_TexStorage2D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width, GLsizei height)
 {
-   texstorage_error(2, target, levels, internalformat, width, height, 1,
-                    "glTexStorage2D");
+   texstorage(2, target, levels, internalformat, width, height, 1,
+              "glTexStorage2D");
 }
 
 
@@ -597,8 +596,8 @@ void GLAPIENTRY
 _mesa_TexStorage3D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width, GLsizei height, GLsizei depth)
 {
-   texstorage_error(3, target, levels, internalformat, width, height, depth,
-                    "glTexStorage3D");
+   texstorage(3, target, levels, internalformat, width, height, depth,
+              "glTexStorage3D");
 }
 
 
