@@ -475,7 +475,7 @@ texture_storage(struct gl_context *ctx, GLuint dims,
  */
 static void
 texstorage(GLuint dims, GLenum target, GLsizei levels, GLenum internalformat,
-           GLsizei width, GLsizei height, GLsizei depth, const char *caller)
+           GLsizei width, GLsizei height, GLsizei depth)
 {
    struct gl_texture_object *texObj;
    GET_CURRENT_CONTEXT(ctx);
@@ -485,13 +485,14 @@ texstorage(GLuint dims, GLenum target, GLsizei levels, GLenum internalformat,
     */
    if (!legal_texobj_target(ctx, dims, target)) {
       _mesa_error(ctx, GL_INVALID_ENUM,
-                  "%s(illegal target=%s)",
-                  caller, _mesa_enum_to_string(target));
+                  "glTexStorage%uD(illegal target=%s)",
+                  dims, _mesa_enum_to_string(target));
       return;
    }
 
    if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "%s %s %d %s %d %d %d\n", caller,
+      _mesa_debug(ctx, "glTexStorage%uD %s %d %s %d %d %d\n",
+                  dims,
                   _mesa_enum_to_string(target), levels,
                   _mesa_enum_to_string(internalformat),
                   width, height, depth);
@@ -499,7 +500,7 @@ texstorage(GLuint dims, GLenum target, GLsizei levels, GLenum internalformat,
    /* Check the format to make sure it is sized. */
    if (!_mesa_is_legal_tex_storage_format(ctx, internalformat)) {
       _mesa_error(ctx, GL_INVALID_ENUM,
-                  "%s(internalformat = %s)", caller,
+                  "glTexStorage%uD(internalformat = %s)", dims,
                   _mesa_enum_to_string(internalformat));
       return;
    }
@@ -561,8 +562,7 @@ void GLAPIENTRY
 _mesa_TexStorage1D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width)
 {
-   texstorage(1, target, levels, internalformat, width, 1, 1,
-              "glTexStorage1D");
+   texstorage(1, target, levels, internalformat, width, 1, 1);
 }
 
 
@@ -570,8 +570,7 @@ void GLAPIENTRY
 _mesa_TexStorage2D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width, GLsizei height)
 {
-   texstorage(2, target, levels, internalformat, width, height, 1,
-              "glTexStorage2D");
+   texstorage(2, target, levels, internalformat, width, height, 1);
 }
 
 
@@ -579,8 +578,7 @@ void GLAPIENTRY
 _mesa_TexStorage3D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width, GLsizei height, GLsizei depth)
 {
-   texstorage(3, target, levels, internalformat, width, height, depth,
-              "glTexStorage3D");
+   texstorage(3, target, levels, internalformat, width, height, depth);
 }
 
 
