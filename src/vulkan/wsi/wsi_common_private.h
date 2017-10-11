@@ -108,6 +108,8 @@ struct wsi_interface {
    VkResult (*get_capabilities2)(VkIcdSurfaceBase *surface,
                                  const void *info_next,
                                  VkSurfaceCapabilities2KHR* pSurfaceCapabilities);
+   VkResult (*get_capabilities2ext)(VkIcdSurfaceBase *surface,
+                                    VkSurfaceCapabilities2EXT* pSurfaceCapabilities);
    VkResult (*get_formats)(VkIcdSurfaceBase *surface,
                            struct wsi_device *wsi_device,
                            uint32_t* pSurfaceFormatCount,

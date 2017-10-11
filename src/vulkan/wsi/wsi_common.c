@@ -717,6 +717,17 @@ wsi_common_get_surface_capabilities2(struct wsi_device *wsi_device,
 }
 
 VkResult
+wsi_common_get_surface_capabilities2ext(struct wsi_device *wsi_device,
+                                        VkSurfaceKHR _surface,
+                                        VkSurfaceCapabilities2EXT *pSurfaceCapabilities)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
+   struct wsi_interface *iface = wsi_device->wsi[surface->platform];
+
+   return iface->get_capabilities2ext(surface, pSurfaceCapabilities);
+}
+
+VkResult
 wsi_common_get_surface_formats(struct wsi_device *wsi_device,
                                VkSurfaceKHR _surface,
                                uint32_t *pSurfaceFormatCount,
