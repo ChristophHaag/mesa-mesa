@@ -179,6 +179,11 @@ wsi_common_get_surface_present_modes(struct wsi_device *wsi_device,
                                      VkPresentModeKHR *pPresentModes);
 
 VkResult
+wsi_common_get_surface_capabilities2ext(struct wsi_device *wsi_device,
+                                        VkSurfaceKHR surface,
+                                        VkSurfaceCapabilities2EXT *pSurfaceCapabilities);
+
+VkResult
 wsi_common_get_images(VkSwapchainKHR _swapchain,
                       uint32_t *pSwapchainImageCount,
                       VkImage *pSwapchainImages);

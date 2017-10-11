@@ -548,6 +548,32 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
 }
 
 static VkResult
+x11_surface_get_capabilities2ext(VkIcdSurfaceBase *icd_surface,
+                                 VkSurfaceCapabilities2EXT *caps)
+{
+   VkSurfaceCapabilitiesKHR     khr_caps;
+   VkResult                     ret;
+
+   assert(caps->sType == VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_EXT);
+   ret = x11_surface_get_capabilities(icd_surface, &khr_caps);
+   if (ret)
+      return ret;
+
+   caps->minImageCount = khr_caps.minImageCount;
+   caps->maxImageCount = khr_caps.maxImageCount;
+   caps->currentExtent = khr_caps.currentExtent;
+   caps->minImageExtent = khr_caps.minImageExtent;
+   caps->maxImageExtent = khr_caps.maxImageExtent;
+   caps->maxImageArrayLayers = khr_caps.maxImageArrayLayers;
+   caps->supportedTransforms = khr_caps.supportedTransforms;
+   caps->currentTransform = khr_caps.currentTransform;
+   caps->supportedCompositeAlpha = khr_caps.supportedCompositeAlpha;
+   caps->supportedUsageFlags = khr_caps.supportedUsageFlags;
+   caps->supportedSurfaceCounters = 0;
+   return ret;
+}
+
+static VkResult
 x11_surface_get_formats(VkIcdSurfaceBase *surface,
                         struct wsi_device *wsi_device,
                         uint32_t *pSurfaceFormatCount,
@@ -1470,6 +1496,7 @@ wsi_x11_init_wsi(struct wsi_device *wsi_device,
    wsi->base.get_support = x11_surface_get_support;
    wsi->base.get_capabilities = x11_surface_get_capabilities;
    wsi->base.get_capabilities2 = x11_surface_get_capabilities2;
+   wsi->base.get_capabilities2ext = x11_surface_get_capabilities2ext;
    wsi->base.get_formats = x11_surface_get_formats;
    wsi->base.get_formats2 = x11_surface_get_formats2;
    wsi->base.get_present_modes = x11_surface_get_present_modes;
