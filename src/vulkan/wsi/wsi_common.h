@@ -48,9 +48,18 @@ struct wsi_memory_allocate_info {
     bool implicit_sync;
 };
 
+struct wsi_fence {
+   VkDevice                     device;
+   struct wsi_device            *wsi_device;
+   VkDisplayKHR                 display;
+   const VkAllocationCallbacks  *alloc;
+   bool                         (*wait)(struct wsi_fence *fence, bool absolute, uint64_t timeout);
+   void                         (*destroy)(struct wsi_fence *fence);
+};
+
 struct wsi_interface;
 
-#define VK_ICD_WSI_PLATFORM_MAX 5
+#define VK_ICD_WSI_PLATFORM_MAX 6
 
 struct wsi_device {
    VkPhysicalDeviceMemoryProperties memory_props;
@@ -93,7 +102,8 @@ VkResult
 wsi_device_init(struct wsi_device *wsi,
                 VkPhysicalDevice pdevice,
                 WSI_FN_GetPhysicalDeviceProcAddr proc_addr,
-                const VkAllocationCallbacks *alloc);
+                const VkAllocationCallbacks *alloc,
+                int device_fd);
 
 void
 wsi_device_finish(struct wsi_device *wsi,
@@ -153,6 +163,11 @@ wsi_common_get_surface_present_modes(struct wsi_device *wsi_device,
                                      VkSurfaceKHR surface,
                                      uint32_t *pPresentModeCount,
                                      VkPresentModeKHR *pPresentModes);
+
+VkResult
+wsi_common_get_surface_capabilities2ext(struct wsi_device *wsi_device,
+                                        VkSurfaceKHR surface,
+                                        VkSurfaceCapabilities2EXT *pSurfaceCapabilities);
 
 VkResult
 wsi_common_get_images(VkSwapchainKHR _swapchain,

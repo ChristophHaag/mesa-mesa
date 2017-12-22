@@ -103,6 +103,8 @@ struct wsi_interface {
    VkResult (*get_capabilities2)(VkIcdSurfaceBase *surface,
                                  const void *info_next,
                                  VkSurfaceCapabilities2KHR* pSurfaceCapabilities);
+   VkResult (*get_capabilities2ext)(VkIcdSurfaceBase *surface,
+                                    VkSurfaceCapabilities2EXT* pSurfaceCapabilities);
    VkResult (*get_formats)(VkIcdSurfaceBase *surface,
                            struct wsi_device *wsi_device,
                            uint32_t* pSurfaceFormatCount,
@@ -134,6 +136,16 @@ VkResult wsi_wl_init_wsi(struct wsi_device *wsi_device,
 void wsi_wl_finish_wsi(struct wsi_device *wsi_device,
                        const VkAllocationCallbacks *alloc);
 
+
+VkResult
+wsi_display_init_wsi(struct wsi_device *wsi_device,
+                     const VkAllocationCallbacks *alloc,
+                     VkPhysicalDevice physical_device,
+                     int device_fd);
+
+void
+wsi_display_finish_wsi(struct wsi_device *wsi_device,
+                       const VkAllocationCallbacks *alloc);
 
 #define WSI_DEFINE_NONDISP_HANDLE_CASTS(__wsi_type, __VkType)              \
                                                                            \

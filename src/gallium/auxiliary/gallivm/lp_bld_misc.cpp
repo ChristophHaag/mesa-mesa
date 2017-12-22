@@ -363,7 +363,7 @@ class DelegatingJITMemoryManager : public BaseMemoryManager {
          mgr()->registerEHFrames(SectionData);
       }
 #endif
-#if HAVE_LLVM >= 0x0500
+#if HAVE_LLVM > 0x0500
       virtual void deregisterEHFrames() {
          mgr()->deregisterEHFrames();
       }

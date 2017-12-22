@@ -29,7 +29,8 @@ VkResult
 wsi_device_init(struct wsi_device *wsi,
                 VkPhysicalDevice pdevice,
                 WSI_FN_GetPhysicalDeviceProcAddr proc_addr,
-                const VkAllocationCallbacks *alloc)
+                const VkAllocationCallbacks *alloc,
+                int device_fd)
 {
    VkResult result;
 
@@ -89,6 +90,19 @@ wsi_device_init(struct wsi_device *wsi,
    }
 #endif
 
+#ifdef VK_USE_PLATFORM_DISPLAY_KHR
+   result = wsi_display_init_wsi(wsi, alloc, pdevice, device_fd);
+   if (result != VK_SUCCESS) {
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+      wsi_wayland_finish_wsi(wsi, alloc);
+#endif
+#ifdef VK_USE_PLATFORM_XCB_KHR
+      wsi_x11_finish_wsi(wsi, alloc);
+#endif
+      return result;
+   }
+#endif
+
    return VK_SUCCESS;
 }
 
@@ -96,6 +110,9 @@ void
 wsi_device_finish(struct wsi_device *wsi,
                   const VkAllocationCallbacks *alloc)
 {
+#ifdef VK_USE_PLATFORM_DISPLAY_KHR
+   wsi_display_finish_wsi(wsi, alloc);
+#endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    wsi_wl_finish_wsi(wsi, alloc);
 #endif
@@ -557,6 +574,17 @@ wsi_common_get_surface_capabilities2(struct wsi_device *wsi_device,
 
    return iface->get_capabilities2(surface, pSurfaceInfo->pNext,
                                    pSurfaceCapabilities);
+}
+
+VkResult
+wsi_common_get_surface_capabilities2ext(struct wsi_device *wsi_device,
+                                        VkSurfaceKHR _surface,
+                                        VkSurfaceCapabilities2EXT *pSurfaceCapabilities)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
+   struct wsi_interface *iface = wsi_device->wsi[surface->platform];
+
+   return iface->get_capabilities2ext(surface, pSurfaceCapabilities);
 }
 
 VkResult
