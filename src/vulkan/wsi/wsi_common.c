@@ -94,7 +94,7 @@ wsi_device_init(struct wsi_device *wsi,
    result = wsi_display_init_wsi(wsi, alloc, pdevice, device_fd);
    if (result != VK_SUCCESS) {
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-      wsi_wayland_finish_wsi(wsi, alloc);
+      wsi_wl_finish_wsi(wsi, alloc);
 #endif
 #ifdef VK_USE_PLATFORM_XCB_KHR
       wsi_x11_finish_wsi(wsi, alloc);
