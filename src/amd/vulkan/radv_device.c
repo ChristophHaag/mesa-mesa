@@ -4638,3 +4638,11 @@ radv_GetDeviceGroupPeerMemoryFeatures(
 	                       VK_PEER_MEMORY_FEATURE_GENERIC_SRC_BIT |
 	                       VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
 }
+
+VkResult radv_QueryCurrentTimestampMESA(VkDevice _device, uint64_t *timestamp)
+{
+	RADV_FROM_HANDLE(radv_device, device, _device);
+
+	*timestamp = device->ws->query_value(device->ws, RADEON_TIMESTAMP);
+	return VK_SUCCESS;
+}
