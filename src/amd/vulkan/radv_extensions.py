@@ -143,6 +143,7 @@ EXTENSIONS = [
     Extension('VK_GOOGLE_decorate_string',                1, True),
     Extension('VK_GOOGLE_hlsl_functionality1',            1, True),
     Extension('VK_NV_compute_shader_derivatives',         1, 'device->rad_info.chip_class >= GFX8'),
+    Extension('VK_GOOGLE_display_timing',                 1, True),
 ]
 
 class VkVersion:

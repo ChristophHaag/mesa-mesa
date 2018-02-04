@@ -296,3 +296,36 @@ VkResult radv_GetPhysicalDevicePresentRectanglesKHR(
 						 surface,
 						 pRectCount, pRects);
 }
+
+/* VK_GOOGLE_display_timing */
+VkResult
+radv_GetRefreshCycleDurationGOOGLE(
+	VkDevice _device,
+	VkSwapchainKHR swapchain,
+	VkRefreshCycleDurationGOOGLE *pDisplayTimingProperties)
+{
+	RADV_FROM_HANDLE(radv_device, device, _device);
+	struct radv_physical_device *pdevice = device->physical_device;
+
+	return wsi_common_get_refresh_cycle_duration(&pdevice->wsi_device,
+						     _device,
+						     swapchain,
+						     pDisplayTimingProperties);
+}
+
+VkResult
+radv_GetPastPresentationTimingGOOGLE(VkDevice _device,
+				     VkSwapchainKHR swapchain,
+				     uint32_t *pPresentationTimingCount,
+				     VkPastPresentationTimingGOOGLE
+				     *pPresentationTimings)
+{
+	RADV_FROM_HANDLE(radv_device, device, _device);
+	struct radv_physical_device *pdevice = device->physical_device;
+
+	return wsi_common_get_past_presentation_timing(&pdevice->wsi_device,
+						       _device,
+						       swapchain,
+						       pPresentationTimingCount,
+						       pPresentationTimings);
+}
