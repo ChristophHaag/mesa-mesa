@@ -20,6 +20,7 @@
 
 vk_api_xml = files('registry/vk.xml')
 vk_android_native_buffer_xml = files('registry/vk_android_native_buffer.xml')
+vk_mesa_query_timestamp_xml = files('registry/vk_mesa_query_timestamp.xml')
 
 inc_vulkan_util = include_directories('util')
 inc_vulkan_wsi = include_directories('wsi')
