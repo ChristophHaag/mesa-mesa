@@ -72,6 +72,7 @@ typedef uint32_t xcb_window_t;
 #include <vulkan/vulkan_intel.h>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vk_android_native_buffer.h>
+#include <vulkan/vk_mesa_query_timestamp.h>
 
 #include "radv_entrypoints.h"
 
