@@ -70,6 +70,7 @@ struct gen_l3_config;
 #include <vulkan/vulkan_intel.h>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vk_android_native_buffer.h>
+#include <vulkan/vk_mesa_query_timestamp.h>
 
 #include "anv_entrypoints.h"
 #include "anv_extensions.h"
@@ -961,6 +962,7 @@ bool anv_gem_supports_48b_addresses(int fd);
 int anv_gem_gpu_get_reset_stats(struct anv_device *device,
                                 uint32_t *active, uint32_t *pending);
 int anv_gem_handle_to_fd(struct anv_device *device, uint32_t gem_handle);
+int anv_gem_reg_read(struct anv_device *device, uint32_t offset, uint64_t *result);
 uint32_t anv_gem_fd_to_handle(struct anv_device *device, int fd);
 int anv_gem_set_caching(struct anv_device *device, uint32_t gem_handle, uint32_t caching);
 int anv_gem_set_domain(struct anv_device *device, uint32_t gem_handle,
