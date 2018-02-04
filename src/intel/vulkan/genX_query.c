@@ -552,6 +552,36 @@ void genX(CmdWriteTimestamp)(
    }
 }
 
+VkResult genX(QueryCurrentTimestampMESA)(
+   VkDevice                                     _device,
+   VkSurfaceKHR                                 _surface,
+   VkCurrentTimestampMESA                       *timestamp)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   struct wsi_device *wsi_device = &device->instance->physicalDevice.wsi_device;
+   int  ret;
+
+   /* XXX older kernels don't support this interface. */
+   ret = anv_gem_reg_read(device, TIMESTAMP | 1,
+                          &timestamp->deviceTimestamp);
+
+   if (ret != 0)
+      return VK_ERROR_DEVICE_LOST;
+
+   struct timespec current;
+   clock_gettime(CLOCK_MONOTONIC, &current);
+
+   uint64_t current_ns = (uint64_t) current.tv_sec * 1000000000ULL +
+      current.tv_nsec;
+
+
+   return wsi_common_convert_timestamp(wsi_device,
+                                       _device,
+                                       _surface,
+                                       current_ns,
+                                       &timestamp->surfaceTimestamp);
+}
+
 #if GEN_GEN > 7 || GEN_IS_HASWELL
 
 static uint32_t
