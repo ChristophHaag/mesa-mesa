@@ -67,6 +67,7 @@ SUBDIRS += vulkan
 endif
 
 EXTRA_DIST += vulkan/registry/vk.xml
+EXTRA_DIST += vulkan/registry/vk_mesa_query_timestamp.xml
 
 if HAVE_AMD_DRIVERS
 SUBDIRS += amd
