@@ -24,36 +24,43 @@
 # out and we'll fail at `make dist'
 vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 vk_android_native_buffer_xml = $(top_srcdir)/src/vulkan/registry/vk_android_native_buffer.xml
+vk_mesa_query_timestamp_xml = $(top_srcdir)/src/vulkan/registry/vk_mesa_query_timestamp.xml
 
 vulkan/anv_entrypoints.c: vulkan/anv_entrypoints_gen.py \
 			  vulkan/anv_extensions.py \
 			  $(vulkan_api_xml) \
+			  $(vk_mesa_query_timestamp_xml) \
 			  $(vk_android_native_buffer_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_entrypoints_gen.py \
 		--xml $(vulkan_api_xml) \
 		--xml $(vk_android_native_buffer_xml) \
+		--xml $(vk_mesa_query_timestamp_xml) \
 		--outdir $(builddir)/vulkan
 vulkan/anv_entrypoints.h: vulkan/anv_entrypoints.c
 
 vulkan/anv_extensions.c: vulkan/anv_extensions_gen.py \
 			 vulkan/anv_extensions.py \
 			 $(vulkan_api_xml) \
+			 $(vk_mesa_query_timestamp_xml) \
 			 $(vk_android_native_buffer_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions_gen.py \
 		--xml $(vulkan_api_xml) \
 		--xml $(vk_android_native_buffer_xml) \
+		--xml $(vk_mesa_query_timestamp_xml) \
 		--out-c $@
 
 vulkan/anv_extensions.h: vulkan/anv_extensions_gen.py \
 			 vulkan/anv_extensions.py \
 			 $(vulkan_api_xml) \
+			 $(vk_mesa_query_timestamp_xml) \
 			 $(vk_android_native_buffer_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions_gen.py \
 		--xml $(vulkan_api_xml) \
 		--xml $(vk_android_native_buffer_xml) \
+		--xml $(vk_mesa_query_timestamp_xml) \
 		--out-h $@
 
 BUILT_SOURCES += $(VULKAN_GENERATED_FILES)
