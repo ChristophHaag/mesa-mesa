@@ -112,6 +112,7 @@ EXTENSIONS = [
     Extension('VK_AMD_shader_core_properties',            1, True),
     Extension('VK_AMD_shader_info',                       1, True),
     Extension('VK_AMD_shader_trinary_minmax',             1, True),
+    Extension('VK_MESA_query_timestamp',                  1, True),
 ]
 
 class VkVersion:
