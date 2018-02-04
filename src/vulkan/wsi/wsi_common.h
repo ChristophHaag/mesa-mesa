@@ -235,4 +235,11 @@ wsi_common_queue_present(const struct wsi_device *wsi,
                          int queue_family_index,
                          const VkPresentInfoKHR *pPresentInfo);
 
+VkResult
+wsi_common_convert_timestamp(const struct wsi_device *wsi,
+                             VkDevice device_h,
+                             VkSurfaceKHR surface_h,
+                             uint64_t monotonic_timestamp,
+                             uint64_t *surface_timestamp);
+
 #endif

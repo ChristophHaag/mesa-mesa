@@ -975,3 +975,20 @@ wsi_common_queue_present(const struct wsi_device *wsi,
 
    return final_result;
 }
+
+VkResult
+wsi_common_convert_timestamp(const struct wsi_device *wsi,
+                             VkDevice device_h,
+                             VkSurfaceKHR surface_h,
+                             uint64_t monotonic_timestamp,
+                             uint64_t *surface_timestamp)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, surface_h);
+   struct wsi_interface *iface = wsi->wsi[surface->platform];
+
+   if (iface->convert_timestamp)
+      return iface->convert_timestamp(surface, wsi, monotonic_timestamp,
+                                      surface_timestamp);
+   *surface_timestamp = monotonic_timestamp;
+   return VK_SUCCESS;
+}

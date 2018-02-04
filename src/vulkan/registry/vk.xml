@@ -3225,6 +3225,10 @@ server.
             <member><type>VkBool32</type>                           <name>conditionalRendering</name></member>
             <member><type>VkBool32</type>                           <name>inheritedConditionalRendering</name></member>
         </type>
+	<type catagory="struct" name="VkCurrentTimestampMESA">
+	  <member><type>uint64_t</type>         <name>deviceTimestamp</name></member>
+	  <member><type>uint64_t</type>        <name>surfaceTimestamp</name></member>
+	</type>
         <type category="struct" name="VkPhysicalDeviceVulkanMemoryModelFeaturesKHR" returnedonly="true" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
             <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR"><type>VkStructureType</type> <name>sType</name></member>
             <member noautovalidity="true"><type>void</type>*      <name>pNext</name></member>
@@ -6302,6 +6306,12 @@ server.
             <param><type>uint32_t</type> <name>maxDrawCount</name></param>
             <param><type>uint32_t</type> <name>stride</name></param>
         </command>
+        <command>
+            <proto><type>VkResult</type> <name>vkQueryCurrentTimestampMESA</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+	    <param><type>VkSurfaceKHR</type> <name>surface</name></param>
+            <param><type>VkCurrentTimestampMESA</type>* <name>pTimestamp</name></param>
+        </command>
         <command queues="graphics,compute,transfer" renderpass="both" cmdbufferlevel="primary,secondary">
             <proto><type>void</type> <name>vkCmdSetCheckpointNV</name></proto>
             <param><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
@@ -9121,16 +9131,14 @@ server.
                 <enum value="&quot;VK_KHR_extension_214&quot;"              name="VK_KHR_EXTENSION_214_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_GOOGLE_extension_215" number="215" author="GOOGLE" contact="Jesse Hall @critsec" supported="disabled">
+        <extension name="VK_MESA_query_timestamp" number="215"
+		   type="device" author="MESA"
+		   contact="Keith Packard @keithp"
+		   supported="vulkan">
             <require>
-                <enum value="0"                                             name="VK_KHR_EXTENSION_215_SPEC_VERSION"/>
-                <enum value="&quot;VK_KHR_extension_215&quot;"              name="VK_KHR_EXTENSION_215_EXTENSION_NAME"/>
-            </require>
-        </extension>
-        <extension name="VK_GOOGLE_extension_216" number="216" author="GOOGLE" contact="Jesse Hall @critsec" supported="disabled">
-            <require>
-                <enum value="0"                                             name="VK_KHR_EXTENSION_216_SPEC_VERSION"/>
-                <enum value="&quot;VK_KHR_extension_216&quot;"              name="VK_KHR_EXTENSION_216_EXTENSION_NAME"/>
+                <enum value="1"                                         name="VK_MESA_QUERY_TIMESTAMP_SPEC_VERSION"/>
+                <enum value="&quot;VK_MESA_query_timestamp&quot;"       name="VK_MESA_QUERY_TIMESTAMP_NAME"/>
+                <command name="vkQueryCurrentTimestampMESA"/>
             </require>
         </extension>
         <extension name="VK_GOOGLE_extension_217" number="217" author="GOOGLE" contact="Jesse Hall @critsec" supported="disabled">
