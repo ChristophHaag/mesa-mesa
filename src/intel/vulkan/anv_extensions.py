@@ -117,6 +117,7 @@ EXTENSIONS = [
     Extension('VK_EXT_shader_viewport_index_layer',       1, True),
     Extension('VK_EXT_display_surface_counter',           1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
     Extension('VK_EXT_display_control',                   1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
+    Extension('VK_MESA_query_timestamp',                  1, True),
 ]
 
 class VkVersion:

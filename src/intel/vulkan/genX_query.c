@@ -546,6 +546,21 @@ void genX(CmdWriteTimestamp)(
    }
 }
 
+VkResult genX(QueryCurrentTimestampMESA)(
+   VkDevice                                     _device,
+   uint64_t                                     *timestamp)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   int  ret;
+
+   /* XXX older kernels don't support this interface. */
+   ret = anv_gem_reg_read(device, TIMESTAMP | 1, timestamp);
+
+   if (ret != 0)
+      return VK_ERROR_DEVICE_LOST;
+   return VK_SUCCESS;
+}
+
 #if GEN_GEN > 7 || GEN_IS_HASWELL
 
 static uint32_t
