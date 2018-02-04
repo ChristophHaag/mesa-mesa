@@ -126,6 +126,10 @@ struct wsi_interface {
                                 const VkSwapchainCreateInfoKHR* pCreateInfo,
                                 const VkAllocationCallbacks* pAllocator,
                                 struct wsi_swapchain **swapchain);
+   VkResult (*convert_timestamp)(VkIcdSurfaceBase *surface,
+                                 const struct wsi_device *wsi_device,
+                                 uint64_t monotonic_timestamp,
+                                 uint64_t *surface_timestamp);
 };
 
 VkResult wsi_x11_init_wsi(struct wsi_device *wsi_device,
