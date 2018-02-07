@@ -1856,6 +1856,7 @@ fi
 AM_CONDITIONAL(HAVE_PLATFORM_X11, echo "$platforms" | grep -q 'x11')
 AM_CONDITIONAL(HAVE_PLATFORM_WAYLAND, echo "$platforms" | grep -q 'wayland')
 AM_CONDITIONAL(HAVE_PLATFORM_DRM, echo "$platforms" | grep -q 'drm')
+AM_CONDITIONAL(HAVE_PLATFORM_DISPLAY, echo "$platforms" | grep -q 'drm')
 AM_CONDITIONAL(HAVE_PLATFORM_SURFACELESS, echo "$platforms" | grep -q 'surfaceless')
 AM_CONDITIONAL(HAVE_PLATFORM_ANDROID, echo "$platforms" | grep -q 'android')
 
