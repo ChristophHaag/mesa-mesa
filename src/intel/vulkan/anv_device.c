@@ -282,6 +282,7 @@ anv_physical_device_init(struct anv_physical_device *device,
 {
    VkResult result;
    int fd;
+   int master_fd = -1;
 
    brw_process_intel_debug_variable();
 
@@ -444,10 +445,13 @@ anv_physical_device_init(struct anv_physical_device *device,
                                                 &device->supported_extensions);
 
    device->local_fd = fd;
+   device->master_fd = master_fd;
    return VK_SUCCESS;
 
 fail:
    close(fd);
+   if (master_fd != -1)
+      close(master_fd);
    return result;
 }
 
