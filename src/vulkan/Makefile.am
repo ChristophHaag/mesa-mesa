@@ -65,6 +65,11 @@ AM_CPPFLAGS += \
 VULKAN_WSI_SOURCES += $(VULKAN_WSI_DISPLAY_FILES)
 endif
 
+if HAVE_XLIB_LEASE
+AM_CPPFLAGS += \
+	-DVK_USE_PLATFORM_XLIB_XRANDR_EXT
+endif
+
 CLEANFILES = $(BUILT_SOURCES)
 
 WL_DRM_XML = $(top_srcdir)/src/egl/wayland/wayland-drm/wayland-drm.xml
