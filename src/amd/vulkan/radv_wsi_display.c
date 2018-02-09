@@ -141,3 +141,14 @@ radv_CreateDisplayPlaneSurfaceKHR(VkInstance                            _instanc
 
 	return wsi_create_display_surface(_instance, alloc, create_info, surface);
 }
+
+VkResult
+radv_ReleaseDisplayEXT(VkPhysicalDevice physical_device,
+		       VkDisplayKHR     display)
+{
+	RADV_FROM_HANDLE(radv_physical_device, pdevice, physical_device);
+
+	return wsi_release_display(physical_device,
+				   &pdevice->wsi_device,
+				   display);
+}
