@@ -113,7 +113,7 @@ if with_platform_wayland
   libradv_files += files('radv_wsi_wayland.c')
 endif
 
-if with_platform_display
+if with_platform_drm
   radv_flags += '-DVK_USE_PLATFORM_DISPLAY_KHR'
   libradv_files += files('radv_wsi_display.c')
 endif
