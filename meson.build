@@ -239,12 +239,11 @@ with_platform_wayland = false
 with_platform_x11 = false
 with_platform_drm = false
 with_platform_surfaceless = false
-with_platform_display = false
 egl_native_platform = ''
 _platforms = get_option('platforms')
 if _platforms == 'auto'
   if system_has_kms_drm
-    _platforms = 'x11,wayland,drm,surfaceless,display'
+    _platforms = 'x11,wayland,drm,surfaceless'
   elif ['darwin', 'windows', 'cygwin'].contains(host_machine.system())
     _platforms = 'x11,surfaceless'
   elif ['haiku'].contains(host_machine.system())
@@ -261,13 +260,12 @@ if _platforms != ''
   with_platform_drm = _split.contains('drm')
   with_platform_haiku = _split.contains('haiku')
   with_platform_surfaceless = _split.contains('surfaceless')
-  with_platform_display = _split.contains('display')
   egl_native_platform = _split[0]
 endif
 
 _xlib_lease = get_option('xlib-lease')
 if _xlib_lease == 'auto'
-  with_xlib_lease = with_platform_x11 and with_platform_display
+  with_xlib_lease = with_platform_x11 and with_platform_drm
 else
   with_xlib_lease = _xlib_lease == 'true'
 endif

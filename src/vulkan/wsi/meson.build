@@ -59,7 +59,7 @@ if with_platform_wayland
   ]
 endif
 
-if with_platform_display
+if with_platform_drm
   vulkan_wsi_args += '-DVK_USE_PLATFORM_DISPLAY_KHR'
   files_vulkan_wsi += files(
     'wsi_common_display.c',
