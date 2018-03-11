@@ -4,6 +4,14 @@
 		<method name="Configure">
 			<arg name="seconds" type="u" direction="in"  />
 		</method>
+		<method name="AddGraph">
+			<arg name="configstring" type="s" direction="in"  />
+		</method>
+		<method name="RemoveGraph">
+			<arg name="configstring" type="u" direction="in"  />
+		</method>
+		<property name="CurrentConfig" type="s" access="read" />
+		<property name="ApplicationBinary" type="s" access="read" />
 		<property name="Activated" type="b" access="read" />
 		<signal name="Beeeeeeeeep" />
 	</interface>

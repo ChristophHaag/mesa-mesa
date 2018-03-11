@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
-import dbus
+from pydbus import SessionBus
 
-session_bus = dbus.SessionBus()
+bus = SessionBus()
+o = bus.get('mesa.hud')
+
+#print(o.Introspect())
+#help(o)
+
+print("Application:", o.ApplicationBinary)
+o.AddGraph("foobar")
+
+#reply = o.Configure(0)
+#print(reply)
+
