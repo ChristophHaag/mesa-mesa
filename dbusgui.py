@@ -8,7 +8,9 @@ o = bus.get('mesa.hud')
 #help(o)
 
 print("Application:", o.ApplicationBinary)
-o.AddGraph("foobar")
+
+print("Adding graph: fps")
+o.AddGraph("fps")
 
 #reply = o.Configure(0)
 #print(reply)
