@@ -108,6 +108,7 @@ files_libgallium = files(
   'driver_trace/tr_texture.h',
   'hud/font.c',
   'hud/font.h',
+  'hud/dbus.c',
   'hud/hud_context.c',
   'hud/hud_context.h',
   'hud/hud_cpu.c',
@@ -524,6 +525,8 @@ u_format_table_c = custom_target(
   capture : true,
 )
 
+dep_dbus = dependency('dbus-1')
+
 libgallium = static_library(
   'gallium',
   [files_libgallium, u_indices_gen_c, u_unfilled_gen_c, u_format_table_c],
@@ -534,7 +537,7 @@ libgallium = static_library(
   cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
   dependencies : [
     dep_libdrm, dep_llvm, dep_unwind, dep_dl, dep_m, dep_thread, dep_lmsensors,
-    idep_nir_headers,
+    idep_nir_headers, dep_dbus,
   ],
   build_by_default : false,
 )

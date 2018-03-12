@@ -29,7 +29,14 @@ static void respond_to_property(DBusConnection *connection, DBusMessage *request
 static void respond_to_property_all(DBusConnection *connection, DBusMessage *request);
 
 
-int dbus_stuff() {
+int dbus_stuff(char** argv) {
+   binaryname = argv[0];
+
+   int pid = (int) getpid();
+   char pidname [100];
+   snprintf(pidname, 100, "%d", pid);
+   printf("Appname: %s, Pid: %s\n", binaryname, pidname);
+
    DBusConnection *connection = NULL;
    DBusError error;
 
@@ -216,6 +223,7 @@ static void respond_to_addgraph(DBusConnection *connection, DBusMessage *request
    int ret = 0;
 
    reply = dbus_message_new_method_return(request);
+   // TODO: how to not send a return value properly
    dbus_message_append_args(reply,
                             DBUS_TYPE_INVALID);
    dbus_connection_send(connection, reply, NULL);
@@ -223,14 +231,7 @@ static void respond_to_addgraph(DBusConnection *connection, DBusMessage *request
 }
 
 int main(int argc, char** argv) {
-   binaryname = argv[0];
-
-   int pid = (int) getpid();
-   char pidname [100];
-   snprintf(pidname, 100, "%d", pid);
-   printf("Pid: %s\n", pidname);
-
-   dbus_stuff();
+   dbus_stuff(argv);
 
    return 0;
 }
