@@ -1785,7 +1785,7 @@ hud_set_record_context(struct hud_context *hud, struct pipe_context *pipe)
  * record queries in one context and draw them in another.
  */
 struct hud_context *
-hud_create(struct cso_context *cso, struct hud_context *share)
+hud_create(struct cso_context *cso, struct hud_context *share, char *gallium_hud_env)
 {
    const char *share_env = debug_get_option("GALLIUM_HUD_SHARE", NULL);
    unsigned record_ctx = 0, draw_ctx = 0;
@@ -1818,7 +1818,9 @@ hud_create(struct cso_context *cso, struct hud_context *share)
    struct pipe_screen *screen = cso_get_pipe_context(cso)->screen;
    struct hud_context *hud;
    unsigned i;
-   const char *env = debug_get_option("GALLIUM_HUD", NULL);
+   const char *env = gallium_hud_env ? gallium_hud_env : debug_get_option("GALLIUM_HUD", NULL);
+   printf("Creating hud with configuration \"%s\"\n", env);
+
 #ifdef PIPE_OS_UNIX
    unsigned signo = debug_get_num_option("GALLIUM_HUD_TOGGLE_SIGNAL", 0);
    static boolean sig_handled = FALSE;

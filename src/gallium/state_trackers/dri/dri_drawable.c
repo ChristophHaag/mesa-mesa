@@ -37,6 +37,7 @@
 #include "util/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
+#include "../../auxiliary/hud/dbus.h"
 
 static uint32_t drifb_ID = 0;
 
@@ -523,6 +524,23 @@ dri_flush(__DRIcontext *cPriv,
       }
 
       dri_postprocessing(ctx, drawable, ST_ATTACHMENT_BACK_LEFT);
+
+      // start dbus stuff
+      if (!dbus_initialized()) {
+         dbus_init();
+      }
+      dbus_update();
+      char *configstring = dbus_reconfigured();
+      if (configstring) {
+         printf("new config string %s\n", configstring);
+         if (ctx->hud) {
+            printf("destroying existing hud\n");
+            hud_destroy(ctx->hud, ctx->st->cso_context);
+         }
+         printf("creating new hud\n");
+         ctx->hud = hud_create(ctx->st->cso_context, NULL, configstring);
+      }
+      // stop dbus stuff
 
       if (ctx->hud) {
          hud_run(ctx->hud, ctx->st->cso_context,

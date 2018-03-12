@@ -36,7 +36,7 @@ struct util_queue_monitoring;
 static char* filename = NULL;
 
 struct hud_context *
-hud_create(struct cso_context *cso, struct hud_context *share);
+hud_create(struct cso_context *cso, struct hud_context *share, char *gallium_hud_env);
 
 void
 hud_destroy(struct hud_context *hud, struct cso_context *cso);

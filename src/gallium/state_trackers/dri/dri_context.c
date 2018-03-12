@@ -186,7 +186,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    if (ctx->st->cso_context) {
       ctx->pp = pp_init(ctx->st->pipe, screen->pp_enabled, ctx->st->cso_context);
       ctx->hud = hud_create(ctx->st->cso_context,
-                            share_ctx ? share_ctx->hud : NULL);
+                            share_ctx ? share_ctx->hud : NULL, NULL);
    }
 
    /* Do this last. */
