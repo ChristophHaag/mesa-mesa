@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
 import sys
 
-from PyQt5.QtWidgets import (QWidget, QPushButton, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QApplication)
-from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtWidgets import (QWidget, QPushButton, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QApplication,
+                             QAbstractItemView)
+from PyQt5.QtCore import pyqtSlot, Qt
 
 from pydbus import SessionBus
 
 OBJECTPATH = "/mesa/hud"
 bus = SessionBus()
 dbus = bus.get("org.freedesktop.DBus")
-names = [(name, name.split("-")[1]) for name in dbus.ListNames() if name.startswith("mesa.")]
-print("Found advertised hud objects from PIDs:")
-for name in names:
-        print("\t" + name[1])
+busnames = [name for name in dbus.ListNames() if name.startswith("mesa.")]
+conns = []
+print("Found advertised hud objects:")
+for busname in busnames:
+    o = bus.get(busname, OBJECTPATH)
+    binaryname = o.ApplicationBinary
+    pid = busname.split("-")[1]
+    conn = {"pid": pid, "busname": busname, "binaryname": binaryname.split("/")[-1], "conn": o, "lastconfig": ""}
+    conns.append(conn)
+    print("\t" + str(conn))
+conns.sort(key=lambda x: int(x["pid"]))
+
+optionblacklist = ["frametime_X", "low-fps"]
 #o = bus.get('mesa.hud')
 
 #print(o.Introspect())
@@ -27,20 +37,53 @@ for name in names:
 #reply = o.Configure(0)
 #print(reply)
 
+def parseGlxInfo(s):
+    start = s.split("Available names:")[1].strip("\n")
+    parsed = []
+    for line in start.split("\n"):
+        if line.startswith("    "):
+            l = line[4:]
+            if not l in optionblacklist:
+                parsed.append(l) #TODO: handle "..."
+        else:
+            break
+    #print("parsed glxinfo:" + str(parsed))
+    return parsed
+
+def glxinfoHudOptions():
+    import subprocess, os
+    my_env = os.environ.copy()
+    my_env["GALLIUM_HUD"] = "help"
+    output = subprocess.check_output(['glxinfo'], env=my_env).decode("UTF-8")
+    parsed = parseGlxInfo(output)
+    #print(parsed)
+    return parsed
 
 class PidList (QListWidget):
-        def Clicked(self, item):
-                print(item)
+    def Clicked(self, item):
+            print(item)
 
 
 class ConfigList (QListWidget):
-        def Clicked(self, item):
-                print(item)
+    def __init__(self):
+        super().__init__()
+        self.setSelectionMode(QAbstractItemView.MultiSelection)
+
+    def Clicked(self, item):
+            print(item)
 
 
 class AvailableConfigList (QListWidget):
-        def Clicked(self, item):
-                print(item.text())
+    def __init__(self):
+        super().__init__()
+        options = glxinfoHudOptions()
+        for option in options:
+            #print("adding item " + option)
+            self.addItem(QListWidgetItem(option))
+        self.setSelectionMode(QAbstractItemView.MultiSelection)
+
+    def Clicked(self, item):
+            print(item.text())
 
 
 class Example(QWidget):
@@ -57,15 +100,24 @@ class Example(QWidget):
         assert isinstance(self.pidlist, QListWidget)
         assert isinstance(self.configlist, QListWidget)
         self.configlist.clear()
+        item = self.pidlist.selectedItems()[0]
+        lastconfig = item.data(Qt.UserRole)["lastconfig"]
+        #print("lastconfig: ", lastconfig)
+        if len(lastconfig) < 1:
+            return
+        for config in lastconfig.split(","):
+            print("adding " + config + " " + str(len(lastconfig.split(","))))
+            self.configlist.addItem(config)
+
 
     @pyqtSlot()
     def add_click(self):
         assert isinstance(self.available, QListWidget)
         assert isinstance(self.configlist, QListWidget)
         if len(self.available.selectedItems()) == 0: return
-        item = self.available.selectedItems()[0]
+        for selectedItem in self.available.selectedItems():
         #print(item.text())
-        self.configlist.addItem(item.text())
+            self.configlist.addItem(selectedItem.text())
 
     @pyqtSlot()
     def remove_click(self):
@@ -84,16 +136,19 @@ class Example(QWidget):
             if i < self.configlist.count() - 1:
                 config += ","
         for selectedItem in self.pidlist.selectedItems():
-            busname = 'mesa.hud' + "-" + selectedItem.text()
-            print("Setting config to \"" + config + "\" on bus " + busname + ", object " + OBJECTPATH)
-            o = bus.get(busname, OBJECTPATH)
-            o.GraphConfiguration(config)
+            conn = selectedItem.data(Qt.UserRole)
+            print("Setting config to \"" + config + "\" on bus " + conn["busname"] + ", object " + OBJECTPATH)
+            conn["conn"].GraphConfiguration(config)
+            conn["lastconfig"] = config
 
     def initUI(self):
 
         pidlist = PidList()
-        for name in names:
-                pidlist.addItem(QListWidgetItem(name[1]))
+        for conn in conns:
+            displayname = conn["binaryname"] + " (" + conn["pid"] + ")"
+            item = QListWidgetItem(displayname)
+            item.setData(Qt.UserRole, conn)
+            pidlist.addItem(item)
         configlist = ConfigList()
         available = AvailableConfigList()
         self.pidlist = pidlist
@@ -124,16 +179,16 @@ class Example(QWidget):
         pidlist.itemClicked.connect(self.pidlist_click)
         # available.itemClicked.connect(available.Clicked)
 
-        available.addItem(QListWidgetItem("fps"))
-        available.addItem(QListWidgetItem("cpu"))
+        #available.addItem(QListWidgetItem("fps"))
+        #available.addItem(QListWidgetItem("cpu"))
 
         allvertical = QVBoxLayout()
 
         mainguihoriz = QHBoxLayout()
 
         mainguihoriz.addWidget(pidlist)
-        mainguihoriz.addLayout(configLayout)
         mainguihoriz.addLayout(availableLayout)
+        mainguihoriz.addLayout(configLayout)
         mainguihoriz.addStretch(1)
 
         mainbuttons = QHBoxLayout()

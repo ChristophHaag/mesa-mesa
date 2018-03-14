@@ -29,6 +29,19 @@ static void check_errors(DBusError *error) {
    }
 }
 
+//https://stackoverflow.com/a/4031835
+static char *program_path() {
+   int PATH_MAX=512;
+   char *path = malloc(PATH_MAX);
+   if (path != NULL) {
+      if (readlink("/proc/self/exe", path, PATH_MAX) == -1) {
+         free(path);
+         path = NULL;
+      }
+   }
+   return path;
+}
+
 static DBusHandlerResult mesage_handler(DBusConnection *connection, DBusMessage *message, void *user_data);
 static void respond_to_introspect(DBusConnection *connection, DBusMessage *request);
 static void respond_to_addgraph(DBusConnection *connection, DBusMessage *request);
@@ -47,7 +60,7 @@ void dbus_update(void);
 char *dbus_reconfigured(void);
 
 void dbus_init(void) {
-   binaryname = "TODO";
+   binaryname = program_path();
 
    int pid = (int) getpid();
    char pidname [100];
