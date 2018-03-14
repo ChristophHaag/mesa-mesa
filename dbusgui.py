@@ -6,8 +6,14 @@ from PyQt5.QtCore import pyqtSlot
 
 from pydbus import SessionBus
 
+OBJECTPATH = "/mesa/hud"
 bus = SessionBus()
-o = bus.get('mesa.hud')
+dbus = bus.get("org.freedesktop.DBus")
+names = [(name, name.split("-")[1]) for name in dbus.ListNames() if name.startswith("mesa.")]
+print("Found advertised hud objects from PIDs:")
+for name in names:
+        print("\t" + name[1])
+#o = bus.get('mesa.hud')
 
 #print(o.Introspect())
 #help(o)
@@ -47,6 +53,12 @@ class Example(QWidget):
         self.initUI()
 
     @pyqtSlot()
+    def pidlist_click(self):
+        assert isinstance(self.pidlist, QListWidget)
+        assert isinstance(self.configlist, QListWidget)
+        self.configlist.clear()
+
+    @pyqtSlot()
     def add_click(self):
         assert isinstance(self.available, QListWidget)
         assert isinstance(self.configlist, QListWidget)
@@ -71,12 +83,17 @@ class Example(QWidget):
             config += self.configlist.item(i).text()
             if i < self.configlist.count() - 1:
                 config += ","
-        print("Setting config to \"" + config + "\"")
-        o.GraphConfiguration(config)
+        for selectedItem in self.pidlist.selectedItems():
+            busname = 'mesa.hud' + "-" + selectedItem.text()
+            print("Setting config to \"" + config + "\" on bus " + busname + ", object " + OBJECTPATH)
+            o = bus.get(busname, OBJECTPATH)
+            o.GraphConfiguration(config)
 
     def initUI(self):
 
         pidlist = PidList()
+        for name in names:
+                pidlist.addItem(QListWidgetItem(name[1]))
         configlist = ConfigList()
         available = AvailableConfigList()
         self.pidlist = pidlist
@@ -103,8 +120,8 @@ class Example(QWidget):
         configRemoveButton.clicked.connect(self.remove_click)
 
 
-        # pidlist.itemClicked.connect(pidlist.Clicked)
-        # pidlist.itemClicked.connect(pidlist.Clicked)
+        # idlist.itemClicked.connect(pidlist.Clicked)
+        pidlist.itemClicked.connect(self.pidlist_click)
         # available.itemClicked.connect(available.Clicked)
 
         available.addItem(QListWidgetItem("fps"))

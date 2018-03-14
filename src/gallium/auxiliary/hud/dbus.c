@@ -15,7 +15,8 @@
 
 void hud_parse_env_var(struct hud_context *hud, struct pipe_screen *screen, const char *env);
 
-char *dbus_busname = "mesa.hud";
+#define BUS_BASENAME "mesa.hud"
+char *dbus_busname;;
 char *dbus_objectpath = "/mesa/hud";
 char *iface = "mesa.hud";
 
@@ -52,6 +53,9 @@ void dbus_init(void) {
    char pidname [100];
    snprintf(pidname, 100, "%d", pid);
    printf("Appname: %s, Pid: %s\n", binaryname, pidname);
+   dbus_busname = malloc(sizeof(char) * (strlen(BUS_BASENAME) + strlen(pidname)));
+   sprintf(dbus_busname, "%s-%s", BUS_BASENAME, pidname);
+   printf("busname %s\n", dbus_busname);
 
    DBusError error;
 
@@ -111,10 +115,10 @@ static DBusHandlerResult mesage_handler(DBusConnection *connection, DBusMessage 
    if (0==strcmp("org.freedesktop.DBus.Introspectable", interface_name) && 0==strcmp("Introspect", member_name)) {
       respond_to_introspect(connection, message);
       return DBUS_HANDLER_RESULT_HANDLED;
-   } else if (0==strcmp(dbus_busname, interface_name) && 0==strcmp("AddGraph", member_name)) {
+   } else if (0==strcmp(iface, interface_name) && 0==strcmp("AddGraph", member_name)) {
       respond_to_addgraph(connection, message);
       return DBUS_HANDLER_RESULT_HANDLED;
-   } else if (0==strcmp(dbus_busname, interface_name) && 0==strcmp("GraphConfiguration", member_name)) {
+   } else if (0==strcmp(iface, interface_name) && 0==strcmp("GraphConfiguration", member_name)) {
       respond_to_configuration(connection, message);
       return DBUS_HANDLER_RESULT_HANDLED;
    } else if (0==strcmp("org.freedesktop.DBus.Properties", interface_name) && 0==strcmp("Get", member_name)) {
