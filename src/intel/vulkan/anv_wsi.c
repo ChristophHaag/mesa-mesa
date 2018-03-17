@@ -48,7 +48,8 @@ anv_init_wsi(struct anv_physical_device *physical_device)
    result = wsi_device_init(&physical_device->wsi_device,
                             anv_physical_device_to_handle(physical_device),
                             anv_wsi_proc_addr,
-                            &physical_device->instance->alloc);
+                            &physical_device->instance->alloc,
+                            physical_device->master_fd);
    if (result != VK_SUCCESS)
       return result;
 
@@ -117,6 +118,18 @@ VkResult anv_GetPhysicalDeviceSurfaceCapabilities2KHR(
    return wsi_common_get_surface_capabilities2(&device->wsi_device,
                                                pSurfaceInfo,
                                                pSurfaceCapabilities);
+}
+
+VkResult anv_GetPhysicalDeviceSurfaceCapabilities2EXT(
+ 	VkPhysicalDevice                            physicalDevice,
+	VkSurfaceKHR                                surface,
+	VkSurfaceCapabilities2EXT*                  pSurfaceCapabilities)
+{
+   ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
+
+   return wsi_common_get_surface_capabilities2ext(&device->wsi_device,
+                                                  surface,
+                                                  pSurfaceCapabilities);
 }
 
 VkResult anv_GetPhysicalDeviceSurfaceFormatsKHR(
@@ -263,4 +276,33 @@ VkResult anv_GetDeviceGroupSurfacePresentModesKHR(
    *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
 
    return VK_SUCCESS;
+}
+
+/* VK_GOOGLE_display_timing */
+VkResult
+anv_GetRefreshCycleDurationGOOGLE(VkDevice                      _device,
+                                  VkSwapchainKHR                swapchain,
+                                  VkRefreshCycleDurationGOOGLE  *pDisplayTimingProperties)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+
+   return wsi_common_get_refresh_cycle_duration(&device->instance->physicalDevice.wsi_device,
+                                                _device,
+                                                swapchain,
+                                                pDisplayTimingProperties);
+}
+
+VkResult
+anv_GetPastPresentationTimingGOOGLE(VkDevice                            _device,
+                                    VkSwapchainKHR                      swapchain,
+                                    uint32_t                            *pPresentationTimingCount,
+                                    VkPastPresentationTimingGOOGLE      *pPresentationTimings)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+
+   return wsi_common_get_past_presentation_timing(&device->instance->physicalDevice.wsi_device,
+                                                  _device,
+                                                  swapchain,
+                                                  pPresentationTimingCount,
+                                                  pPresentationTimings);
 }

@@ -72,10 +72,12 @@ typedef uint32_t xcb_window_t;
 #include <vulkan/vulkan_intel.h>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vk_android_native_buffer.h>
+#include <vulkan/vk_mesa_query_timestamp.h>
 
 #include "radv_entrypoints.h"
 
 #include "wsi_common.h"
+#include "wsi_common_display.h"
 
 #define ATI_VENDOR_ID 0x1002
 
@@ -283,6 +285,7 @@ struct radv_physical_device {
 	uint8_t                                     cache_uuid[VK_UUID_SIZE];
 
 	int local_fd;
+	int master_fd;
 	struct wsi_device                       wsi_device;
 
 	bool has_rbplus; /* if RB+ register exist */
@@ -1669,8 +1672,17 @@ void radv_initialise_cmask(struct radv_cmd_buffer *cmd_buffer,
 void radv_initialize_dcc(struct radv_cmd_buffer *cmd_buffer,
 			 struct radv_image *image, uint32_t value);
 
+enum radv_fence_type {
+	RADV_FENCE_TYPE_WINSYS = 0,
+	RADV_FENCE_TYPE_WSI = 1
+};
+
 struct radv_fence {
-	struct radeon_winsys_fence *fence;
+	enum radv_fence_type type;
+	union {
+		struct radeon_winsys_fence      *fence;
+		struct wsi_fence                *fence_wsi;
+	};
 	bool submitted;
 	bool signalled;
 

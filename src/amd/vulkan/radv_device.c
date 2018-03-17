@@ -223,6 +223,7 @@ radv_physical_device_init(struct radv_physical_device *device,
 	VkResult result;
 	drmVersionPtr version;
 	int fd;
+	int master_fd = -1;
 
 	fd = open(path, O_RDWR | O_CLOEXEC);
 	if (fd < 0)
@@ -237,6 +238,8 @@ radv_physical_device_init(struct radv_physical_device *device,
 
 	if (strcmp(version->name, "amdgpu")) {
 		drmFreeVersion(version);
+		if (master_fd != -1)
+			close(master_fd);
 		close(fd);
 		return VK_ERROR_INCOMPATIBLE_DRIVER;
 	}
@@ -254,6 +257,24 @@ radv_physical_device_init(struct radv_physical_device *device,
 		goto fail;
 	}
 
+	if (instance->enabled_extensions.KHR_display) {
+		master_fd = open(drm_device->nodes[DRM_NODE_PRIMARY], O_RDWR | O_CLOEXEC);
+		if (master_fd >= 0) {
+			uint32_t accel_working = 0;
+			struct drm_amdgpu_info request = {
+				.return_pointer = (uintptr_t)&accel_working,
+				.return_size = sizeof(accel_working),
+				.query = AMDGPU_INFO_ACCEL_WORKING
+			};
+
+			if (drmCommandWrite(master_fd, DRM_AMDGPU_INFO, &request, sizeof (struct drm_amdgpu_info)) < 0 || !accel_working) {
+				close(master_fd);
+				master_fd = -1;
+			}
+		}
+	}
+
+	device->master_fd = master_fd;
 	device->local_fd = fd;
 	device->ws->query_info(device->ws, &device->rad_info);
 
@@ -317,6 +338,8 @@ radv_physical_device_init(struct radv_physical_device *device,
 
 fail:
 	close(fd);
+	if (master_fd != -1)
+		close(master_fd);
 	return result;
 }
 
@@ -327,6 +350,8 @@ radv_physical_device_finish(struct radv_physical_device *device)
 	device->ws->destroy(device->ws);
 	disk_cache_destroy(device->disk_cache);
 	close(device->local_fd);
+	if (device->master_fd != -1)
+		close(device->master_fd);
 }
 
 static void *
@@ -2957,6 +2982,7 @@ VkResult radv_CreateFence(
 	if (!fence)
 		return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
+        fence->type = RADV_FENCE_TYPE_WINSYS;
 	fence->submitted = false;
 	fence->signalled = !!(pCreateInfo->flags & VK_FENCE_CREATE_SIGNALED_BIT);
 	fence->temp_syncobj = 0;
@@ -2999,8 +3025,16 @@ void radv_DestroyFence(
 		device->ws->destroy_syncobj(device->ws, fence->temp_syncobj);
 	if (fence->syncobj)
 		device->ws->destroy_syncobj(device->ws, fence->syncobj);
-	if (fence->fence)
-		device->ws->destroy_fence(fence->fence);
+        switch (fence->type) {
+        case RADV_FENCE_TYPE_WINSYS:
+		if (fence->fence)
+			device->ws->destroy_fence(fence->fence);
+		break;
+	case RADV_FENCE_TYPE_WSI:
+		if (fence->fence_wsi)
+			fence->fence_wsi->destroy(fence->fence_wsi);
+		break;
+	}
 	vk_free2(&device->alloc, pAllocator, fence);
 }
 
@@ -3074,7 +3108,8 @@ VkResult radv_WaitForFences(
 					return VK_SUCCESS;
 				}
 
-				fences[wait_count++] = fence->fence;
+				if (fence->type == RADV_FENCE_TYPE_WINSYS)
+					fences[wait_count++] = fence->fence;
 			}
 
 			bool success = device->ws->fences_wait(device->ws, fences, wait_count,
@@ -3112,21 +3147,30 @@ VkResult radv_WaitForFences(
 		if (fence->signalled)
 			continue;
 
-		if (!fence->submitted) {
-			while(radv_get_current_time() <= timeout && !fence->submitted)
-				/* Do nothing */;
+		switch (fence->type) {
+		case RADV_FENCE_TYPE_WINSYS:
+			if (!fence->submitted) {
+				while(radv_get_current_time() <= timeout && !fence->submitted)
+					/* Do nothing */;
 
-			if (!fence->submitted)
+				if (!fence->submitted)
+					return VK_TIMEOUT;
+
+				/* Recheck as it may have been set by submitting operations. */
+				if (fence->signalled)
+					continue;
+			}
+
+			expired = device->ws->fence_wait(device->ws, fence->fence, true, timeout);
+			if (!expired)
 				return VK_TIMEOUT;
-
-			/* Recheck as it may have been set by submitting operations. */
-			if (fence->signalled)
-				continue;
+			break;
+		case RADV_FENCE_TYPE_WSI:
+			expired = fence->fence_wsi->wait(fence->fence_wsi, true, timeout);
+			if (!expired)
+				return VK_TIMEOUT;
+			break;
 		}
-
-		expired = device->ws->fence_wait(device->ws, fence->fence, true, timeout);
-		if (!expired)
-			return VK_TIMEOUT;
 
 		fence->signalled = true;
 	}
@@ -3178,9 +3222,16 @@ VkResult radv_GetFenceStatus(VkDevice _device, VkFence _fence)
 		return VK_SUCCESS;
 	if (!fence->submitted)
 		return VK_NOT_READY;
-	if (!device->ws->fence_wait(device->ws, fence->fence, false, 0))
-		return VK_NOT_READY;
-
+	switch (fence->type) {
+	case RADV_FENCE_TYPE_WINSYS:
+		if (!device->ws->fence_wait(device->ws, fence->fence, false, 0))
+			return VK_NOT_READY;
+		break;
+	case RADV_FENCE_TYPE_WSI:
+		if (!fence->fence_wsi->wait(fence->fence_wsi, false, 0))
+			return VK_NOT_READY;
+		break;
+	}
 	return VK_SUCCESS;
 }
 
@@ -4355,4 +4406,12 @@ radv_GetDeviceGroupPeerMemoryFeatures(
 	                       VK_PEER_MEMORY_FEATURE_COPY_DST_BIT |
 	                       VK_PEER_MEMORY_FEATURE_GENERIC_SRC_BIT |
 	                       VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
+}
+
+VkResult radv_QueryCurrentTimestampMESA(VkDevice _device, uint64_t *timestamp)
+{
+	RADV_FROM_HANDLE(radv_device, device, _device);
+
+	*timestamp = device->ws->query_value(device->ws, RADEON_TIMESTAMP);
+	return VK_SUCCESS;
 }

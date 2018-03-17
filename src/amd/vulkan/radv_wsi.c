@@ -41,7 +41,8 @@ radv_init_wsi(struct radv_physical_device *physical_device)
 	return wsi_device_init(&physical_device->wsi_device,
 			       radv_physical_device_to_handle(physical_device),
 			       radv_wsi_proc_addr,
-			       &physical_device->instance->alloc);
+			       &physical_device->instance->alloc,
+			       physical_device->master_fd);
 }
 
 void
@@ -100,6 +101,18 @@ VkResult radv_GetPhysicalDeviceSurfaceCapabilities2KHR(
 	return wsi_common_get_surface_capabilities2(&device->wsi_device,
 						    pSurfaceInfo,
 						    pSurfaceCapabilities);
+}
+
+VkResult radv_GetPhysicalDeviceSurfaceCapabilities2EXT(
+ 	VkPhysicalDevice                            physicalDevice,
+	VkSurfaceKHR                                surface,
+	VkSurfaceCapabilities2EXT*                  pSurfaceCapabilities)
+{
+	RADV_FROM_HANDLE(radv_physical_device, device, physicalDevice);
+
+	return wsi_common_get_surface_capabilities2ext(&device->wsi_device,
+						       surface,
+						       pSurfaceCapabilities);
 }
 
 VkResult radv_GetPhysicalDeviceSurfaceFormatsKHR(
@@ -235,7 +248,6 @@ VkResult radv_QueuePresentKHR(
 					pPresentInfo);
 }
 
-
 VkResult radv_GetDeviceGroupPresentCapabilitiesKHR(
     VkDevice                                    device,
     VkDeviceGroupPresentCapabilitiesKHR*        pCapabilities)
@@ -256,4 +268,36 @@ VkResult radv_GetDeviceGroupSurfacePresentModesKHR(
    *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
 
    return VK_SUCCESS;
+}
+
+/* VK_GOOGLE_display_timing */
+VkResult
+radv_GetRefreshCycleDurationGOOGLE(
+	VkDevice                      _device,
+	VkSwapchainKHR                swapchain,
+	VkRefreshCycleDurationGOOGLE  *pDisplayTimingProperties)
+{
+	RADV_FROM_HANDLE(radv_device, device, _device);
+	struct radv_physical_device *pdevice = device->physical_device;
+
+	return wsi_common_get_refresh_cycle_duration(&pdevice->wsi_device,
+						     _device,
+						     swapchain,
+						     pDisplayTimingProperties);
+}
+
+VkResult
+radv_GetPastPresentationTimingGOOGLE(VkDevice                            _device,
+				     VkSwapchainKHR                      swapchain,
+				     uint32_t                            *pPresentationTimingCount,
+				     VkPastPresentationTimingGOOGLE      *pPresentationTimings)
+{
+	RADV_FROM_HANDLE(radv_device, device, _device);
+	struct radv_physical_device *pdevice = device->physical_device;
+
+	return wsi_common_get_past_presentation_timing(&pdevice->wsi_device,
+						       _device,
+						       swapchain,
+						       pPresentationTimingCount,
+						       pPresentationTimings);
 }

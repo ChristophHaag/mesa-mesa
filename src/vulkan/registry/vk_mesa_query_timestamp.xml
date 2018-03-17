@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<registry>
+    <commands>
+        <command>
+            <proto><type>VkResult</type> <name>vkQueryCurrentTimestampMESA</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+            <param><type>uint64_t</type>* <name>pTimestamp</name></param>
+        </command>
+    </commands>
+    <extensions>
+        <extension name="VK_MESA_query_timestamp" number="200"
+		   type="device" author="MESA"
+		   contact="Keith Packard @keithp"
+		   supported="vulkan">
+            <require>
+                <enum value="1"                                         name="VK_MESA_QUERY_TIMESTAMP_SPEC_VERSION"/>
+                <enum value="&quot;VK_MESA_query_timestamp&quot;"       name="VK_MESA_QUERY_TIMESTAMP_NAME"/>
+                <command name="vkQueryCurrentTimestampMESA"/>
+            </require>
+        </extension>
+    </extensions>
+</registry>
