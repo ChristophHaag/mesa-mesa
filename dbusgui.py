@@ -137,6 +137,12 @@ class ConfigList (QGridLayout):
                 configlist = self.configgrid[i][j]
                 self.removeSelectedItems(configlist)
 
+    def clear(self):
+        for i in range(GRIDSIZEH):
+            for j in range(GRIDSIZEV):
+                configlist = self.configgrid[i][j]
+                configlist.clear()
+
     def getOptionString(self):
         s = ""
         #print("options")
@@ -222,7 +228,7 @@ class Example(QWidget):
     def pidlist_click(self):
         assert isinstance(self.pidlist, QListWidget)
         assert isinstance(self.configlist, ConfigList)
-        #self.configlist.clear()
+        self.configlist.clear()
         item = self.pidlist.selectedItems()[0]
         lastconfig = item.data(Qt.UserRole)["lastconfig"]
         #print("lastconfig: ", lastconfig)
