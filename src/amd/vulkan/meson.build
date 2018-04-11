@@ -20,10 +20,10 @@
 
 radv_entrypoints = custom_target(
   'radv_entrypoints.[ch]',
-  input : ['radv_entrypoints_gen.py', vk_api_xml, vk_android_native_buffer_xml, vk_mesa_query_timestamp_xml],
+  input : ['radv_entrypoints_gen.py', vk_api_xml, vk_mesa_query_timestamp_xml],
   output : ['radv_entrypoints.h', 'radv_entrypoints.c'],
   command : [
-    prog_python2, '@INPUT0@', '--xml', '@INPUT1@', '--xml', '@INPUT2@', '--xml', '@INPUT3@', '--outdir',
+    prog_python2, '@INPUT0@', '--xml', '@INPUT1@', '--xml', '@INPUT2@', '--outdir',
     meson.current_build_dir()
   ],
   depend_files : files('radv_extensions.py'),
