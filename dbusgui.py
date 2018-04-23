@@ -12,22 +12,10 @@ VERBOSE = False
 
 OBJECTPATH = "/mesa/hud"
 optionblacklist = ["frametime_X", "low-fps"]
-#o = bus.get('mesa.hud')
-
-#print(o.Introspect())
-#help(o)
-
-#print("Application:", o.ApplicationBinary)
-
-#config = "fps" if len(sys.argv) < 2 else sys.argv[1]
-#print("Setting graph config to:", config)
-#o.GraphConfiguration(config)
-
-#reply = o.Configure(0)
-#print(reply)
 
 GRIDSIZEV = 9
 GRIDSIZEH = GRIDSIZEV // 3
+
 
 def parseGlxInfo(s):
     start = s.split("Available names:")[1].strip("\n")
@@ -42,6 +30,7 @@ def parseGlxInfo(s):
     #print("parsed glxinfo:" + str(parsed))
     return parsed
 
+
 def glxinfoHudOptions():
     import subprocess, os
     my_env = os.environ.copy()
@@ -51,7 +40,9 @@ def glxinfoHudOptions():
     #print(parsed)
     return parsed
 
+
 hudoptions = glxinfoHudOptions()
+
 
 class ThumbListWidget(QListWidget):
     def __init__(self, selectionMode=QAbstractItemView.ExtendedSelection):
@@ -155,9 +146,43 @@ class ConfigList (QGridLayout):
                 s += onecolumn
         #print(s)
         return s
-                    
-                
-                
+
+    def set_grid_option(self, col, row, graphs):
+        configlist = self.configgrid[col][row]
+        for graph in graphs:
+            configlist.addItem(graph)
+
+    def parse_config_str(self, config):
+        c = []
+        """
+        :param config:
+        :return: config[col][row][graphs]
+        """
+        for column in config.split(";"):
+            #print("Column", column)
+            r = []
+            for row in column.split(","):
+                #print("Row", row)
+                g = []
+                for graph in row.split("+"):
+                    g.append(graph)
+                r.append(g)
+            c.append(r)
+
+            #print("Graph: ", graph)
+
+
+        print("Parsed: ", c)
+        return c
+
+    def set_config(self, config):
+        print("Setting config to", config)
+        parsed_config = self.parse_config_str(config)
+        self.clear()
+        for column in range(len(parsed_config)):
+            for row in range(len(parsed_config[column])):
+                self.set_grid_option(column, row, parsed_config[column][row])
+
     def Clicked(self, item):
             print(item)
 
@@ -180,6 +205,7 @@ class AvailableConfigList (ThumbListWidget):
 
     def Clicked(self, item):
             print(item.text())
+
 
 #https://stackoverflow.com/a/7767999
 class CustomQCompleter(QCompleter):
@@ -219,11 +245,11 @@ class DBusGUI(QWidget):
         self.lastbusnames = None
 
         self.initUI()
-        self.conns = self.update_dbus()
+        self.conns, _ = self.update_dbus()
 
         self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.update_pidlist)
-        self.timer.start(1000)  # trigger every second
+        self.timer.timeout.connect(self.update_pidlist)  # TODO: Listen for dbus changes (is it even possible with list & match?)
+        self.timer.start(1000)
 
     def update_pidlist(self):
         self.conns, updated = self.update_dbus()
@@ -233,7 +259,7 @@ class DBusGUI(QWidget):
         for conn in self.conns:
             displayname = conn["binaryname"] + " (" + conn["pid"] + ")"
             item = QListWidgetItem(displayname)
-            item.setData(Qt.UserRole, conn)
+            item.setData(Qt.UserRole, conn["pid"])
             self.pidlist.addItem(item)
 
     def update_dbus(self):
@@ -260,13 +286,13 @@ class DBusGUI(QWidget):
         assert isinstance(self.configlist, ConfigList)
         self.configlist.clear()
         item = self.pidlist.selectedItems()[0]
-        lastconfig = item.data(Qt.UserRole)["lastconfig"]
+        pid = item.data(Qt.UserRole)
+        conn = self.get_conn(pid)
+        lastconfig = conn["lastconfig"]
         #print("lastconfig: ", lastconfig)
         if len(lastconfig) < 1:
             return
-        for config in lastconfig.split(","):
-            print("adding " + config + " " + str(len(lastconfig.split(","))))
-            self.configlist.addItem(config)
+        self.configlist.set_config(lastconfig)
 
     @pyqtSlot()
     def add_click(self):
@@ -281,6 +307,11 @@ class DBusGUI(QWidget):
     def remove_click(self):
         self.configlist.removeAllSelected()
 
+    def get_conn(self, pid):
+        for conn in self.conns:
+            if conn["pid"] == pid:
+                return conn
+
     @pyqtSlot()
     def set_click(self):
         config = self.configlist.getOptionString()
@@ -291,7 +322,9 @@ class DBusGUI(QWidget):
         #        config += ","
         print("Setting config to \"" + config + "\" for the following applications:")
         for selectedItem in self.pidlist.selectedItems():
-            conn = selectedItem.data(Qt.UserRole)
+            pid = selectedItem.data(Qt.UserRole)
+            conn = self.get_conn(pid)
+            print("data", conn)
             conn["conn"].GraphConfiguration(config)
             conn["lastconfig"] = config
             print("\tbus: " + conn["busname"] + ", object: " + OBJECTPATH)
