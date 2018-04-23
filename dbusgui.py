@@ -8,21 +8,9 @@ from PyQt5 import QtCore
 
 from pydbus import SessionBus
 
-OBJECTPATH = "/mesa/hud"
-bus = SessionBus()
-dbus = bus.get("org.freedesktop.DBus")
-busnames = [name for name in dbus.ListNames() if name.startswith("mesa.")]
-conns = []
-print("Found advertised hud objects:")
-for busname in busnames:
-    o = bus.get(busname, OBJECTPATH)
-    binaryname = o.ApplicationBinary
-    pid = busname.split("-")[1]
-    conn = {"pid": pid, "busname": busname, "binaryname": binaryname.split("/")[-1], "conn": o, "lastconfig": ""}
-    conns.append(conn)
-    print("\t" + str(conn))
-conns.sort(key=lambda x: int(x["pid"]))
+VERBOSE = False
 
+OBJECTPATH = "/mesa/hud"
 optionblacklist = ["frametime_X", "low-fps"]
 #o = bus.get('mesa.hud')
 
@@ -214,7 +202,8 @@ class CustomQCompleter(QCompleter):
         proxy_model.setSourceModel(self.source_model)
         super(CustomQCompleter, self).setModel(proxy_model)
 
-class Example(QWidget):
+
+class DBusGUI(QWidget):
     pidlist = None
     configlist = None
     available = None
@@ -222,7 +211,48 @@ class Example(QWidget):
 
     def __init__(self):
         super().__init__()
+
+        self.bus = SessionBus()
+        self.dbus = self.bus.get("org.freedesktop.DBus")
+
+        self.busnames = None
+        self.lastbusnames = None
+
         self.initUI()
+        self.conns = self.update_dbus()
+
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.update_pidlist)
+        self.timer.start(1000)  # trigger every second
+
+    def update_pidlist(self):
+        self.conns, updated = self.update_dbus()
+        if not updated:
+            return
+        self.pidlist.clear()
+        for conn in self.conns:
+            displayname = conn["binaryname"] + " (" + conn["pid"] + ")"
+            item = QListWidgetItem(displayname)
+            item.setData(Qt.UserRole, conn)
+            self.pidlist.addItem(item)
+
+    def update_dbus(self):
+        conns = []
+        self.busnames = [name for name in self.dbus.ListNames() if name.startswith("mesa.")]
+        if self.busnames == self.lastbusnames:
+            return self.conns, False
+        self.lastbusnames = self.busnames
+        if VERBOSE: print("Found advertised hud objects:")
+        for busname in self.busnames:
+            o = self.bus.get(busname, OBJECTPATH)
+            binaryname = o.ApplicationBinary
+            pid = busname.split("-")[1]
+            conn = {"pid": pid, "busname": busname, "binaryname": binaryname.split("/")[-1], "conn": o,
+                    "lastconfig": ""}
+            conns.append(conn)
+            if VERBOSE: print("\t" + str(conn))
+        conns.sort(key=lambda x: int(x["pid"]))
+        return conns, True
 
     @pyqtSlot()
     def pidlist_click(self):
@@ -237,7 +267,6 @@ class Example(QWidget):
         for config in lastconfig.split(","):
             print("adding " + config + " " + str(len(lastconfig.split(","))))
             self.configlist.addItem(config)
-
 
     @pyqtSlot()
     def add_click(self):
@@ -273,17 +302,11 @@ class Example(QWidget):
         self.available.clear()
         self.available.fill(text)
 
-
     def initUI(self):
-        pidlist = PidList()
-        for conn in conns:
-            displayname = conn["binaryname"] + " (" + conn["pid"] + ")"
-            item = QListWidgetItem(displayname)
-            item.setData(Qt.UserRole, conn)
-            pidlist.addItem(item)
+        self.pidlist = PidList()
+        self.update_pidlist()
         configlist = ConfigList()
         available = AvailableConfigList()
-        self.pidlist = pidlist
         self.configlist = configlist
         self.available = available
                 
@@ -322,7 +345,7 @@ class Example(QWidget):
 
 
         # idlist.itemClicked.connect(pidlist.Clicked)
-        pidlist.itemClicked.connect(self.pidlist_click)
+        self.pidlist.itemClicked.connect(self.pidlist_click)
         # available.itemClicked.connect(available.Clicked)
 
         #available.addItem(QListWidgetItem("fps"))
@@ -332,7 +355,7 @@ class Example(QWidget):
 
         mainguihoriz = QHBoxLayout()
 
-        mainguihoriz.addWidget(pidlist)
+        mainguihoriz.addWidget(self.pidlist)
         mainguihoriz.addLayout(availableLayout)
         mainguihoriz.addLayout(configLayout)
         mainguihoriz.addStretch(1)
@@ -341,7 +364,6 @@ class Example(QWidget):
         mainbuttons.addStretch(1)
         mainbuttons.addWidget(okButton)
         mainbuttons.addWidget(cancelButton)
-
 
         allvertical.addLayout(mainguihoriz)
         allvertical.addLayout(mainbuttons)
@@ -353,8 +375,9 @@ class Example(QWidget):
         self.setWindowTitle('Mesa HUD GUI prototype')
         self.show()
 
+
 if __name__ == '__main__':
     
     app = QApplication(sys.argv)
-    ex = Example()
+    ex = DBusGUI()
     sys.exit(app.exec_())
