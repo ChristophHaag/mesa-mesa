@@ -1,14 +1,28 @@
 #!/usr/bin/env python3
 import sys
 
+import os
 from PyQt5.QtWidgets import (QWidget, QPushButton, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QGridLayout,
-                             QApplication, QAbstractItemView, QCompleter, QLineEdit)
+                             QApplication, QAbstractItemView, QCompleter, QLineEdit, QMessageBox)
 from PyQt5.QtCore import pyqtSlot, Qt, QStringListModel, QSortFilterProxyModel
 from PyQt5 import QtCore
 
 from pydbus import SessionBus
+import appdirs
 
 VERBOSE = False
+
+"""
+hud config file format:
+userchosenname configstring
+userchosenname configstring
+"""
+configdir = appdirs.user_config_dir(appname="mesa_hud_config")
+configfilename = configdir + "/" + "hudconfigs.txt"
+if not os.path.exists(configdir):
+    os.mkdir(configdir)
+print("using config file", configfilename)
+
 
 OBJECTPATH = "/mesa/hud"
 optionblacklist = ["frametime_X", "low-fps"]
@@ -229,6 +243,96 @@ class CustomQCompleter(QCompleter):
         super(CustomQCompleter, self).setModel(proxy_model)
 
 
+class SavedConfigs(QVBoxLayout):
+    def __init__(self, configlist):
+        super().__init__()
+        self.configlist: ConfigList = configlist
+        self.list = QListWidget()
+
+        self.buttons = QVBoxLayout()
+        self.savebutton = QPushButton("Save current as New")
+        self.savebutton.clicked.connect(self.save_clicked)
+        self.buttons.addWidget(self.savebutton)
+        self.loadbutton = QPushButton("Apply selected")
+        self.loadbutton.clicked.connect(self.load_clicked)
+        self.buttons.addWidget(self.loadbutton)
+        self.rmbutton = QPushButton("Remove selected")
+        self.buttons.addWidget(self.rmbutton)
+        self.rmbutton.clicked.connect(self.rm_clicked)
+
+        self.namebox = QLineEdit()
+        self.addWidget(self.namebox)
+
+        self.addWidget(self.list)
+        self.addLayout(self.buttons)
+
+        self.list.currentItemChanged.connect(self.listclicked)
+
+        self.options = {}
+        if not os.path.isfile(configfilename):
+            return
+        self.loadfromfile()
+
+    def listclicked(self, item):
+        if not item:
+            self.namebox.setText("")
+            return
+        name = item.data(Qt.UserRole)
+        self.namebox.setText(name)
+
+    def loadfromfile(self):
+        self.list.clear()
+        with open(configfilename, "r") as f:
+            for line in f.readlines():
+                if line.rstrip():
+                    name, config = line.rstrip().split(" ", maxsplit=1)
+                    self.options[name] = config
+                    item = QListWidgetItem(config)
+                    item.setData(Qt.UserRole, name)
+                    self.list.addItem(item)
+
+    def save_to_file(self):
+        with open(configfilename, "w") as f:
+            for name, option in self.options.items():
+                f.write(name + " " + option + "\n")
+
+    def save_clicked(self):
+        options = self.configlist.getOptionString()
+        if not options.rstrip():
+            return
+        name = self.namebox.text().rstrip()
+        if not name:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Information)
+            msg.setText("Please enter a name for this config first")
+            # msg.setInformativeText("This is additional information")
+            msg.setWindowTitle("Mesa HUD: Name missing")
+            # msg.setDetailedText("The details are as follows:")
+            msg.setStandardButtons(QMessageBox.Ok)
+            msg.exec_()
+            return
+        options = self.configlist.getOptionString()
+        self.options[name] = options
+        self.save_to_file()
+        print("Saving...", options)
+        self.loadfromfile()
+
+    def load_clicked(self):
+        options = self.list.selectedItems()[0].text()
+        self.configlist.set_config(options)
+        print("Loading...", options)
+
+    def rm_clicked(self):
+        selected = self.list.selectedItems()
+        if len(selected) == 0:
+            return
+        item = selected[0]
+        name = item.data(Qt.UserRole)
+        print("Removing...", name)
+        del self.options[name]
+        self.save_to_file()
+        self.loadfromfile()
+
 class DBusGUI(QWidget):
     pidlist = None
     configlist = None
@@ -384,6 +488,9 @@ class DBusGUI(QWidget):
         #available.addItem(QListWidgetItem("fps"))
         #available.addItem(QListWidgetItem("cpu"))
 
+
+        self.savedconfiglist = SavedConfigs(self.configlist)
+
         allvertical = QVBoxLayout()
 
         mainguihoriz = QHBoxLayout()
@@ -391,6 +498,7 @@ class DBusGUI(QWidget):
         mainguihoriz.addWidget(self.pidlist)
         mainguihoriz.addLayout(availableLayout)
         mainguihoriz.addLayout(configLayout)
+        mainguihoriz.addLayout(self.savedconfiglist)
         mainguihoriz.addStretch(1)
 
         mainbuttons = QHBoxLayout()
