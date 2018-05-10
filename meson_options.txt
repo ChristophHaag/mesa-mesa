@@ -232,6 +232,12 @@ option(
   description : 'Build with LLVM support.'
 )
 option(
+  'shared-llvm',
+  type : 'boolean',
+  value : true,
+  description : 'Build with shared LLVM libraries'
+)
+option(
   'valgrind',
   type : 'combo',
   value : 'auto',

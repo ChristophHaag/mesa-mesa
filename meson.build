@@ -356,7 +356,7 @@ if with_glx != 'disabled'
     else
       error('Cannot build GLX support without X11 platform support and at least one OpenGL API')
     endif
-  elif with_glx == 'gallium-xlib' 
+  elif with_glx == 'gallium-xlib'
     if not with_gallium
       error('Gallium-xlib based GLX requires at least one gallium driver')
     elif not with_gallium_softpipe
@@ -364,7 +364,7 @@ if with_glx != 'disabled'
     elif with_dri
       error('gallium-xlib conflicts with any dri driver')
     endif
-  elif with_glx == 'xlib' 
+  elif with_glx == 'xlib'
     if with_dri
       error('xlib conflicts with any dri driver')
     endif
@@ -881,8 +881,8 @@ endif
 # Building x86 assembly code requires running x86 binaries. It is possible for
 # x86_64 OSes to run x86 binaries, so don't disable asm in those cases
 # TODO: it should be possible to use an exe_wrapper to run the binary during
-# the build. 
-if meson.is_cross_build() 
+# the build.
+if meson.is_cross_build()
   if not (build_machine.cpu_family() == 'x86_64' and host_machine.cpu_family() == 'x86'
           and build_machine.system() == host_machine.system())
     message('Cross compiling to x86 from non-x86, disabling asm')
@@ -1116,15 +1116,18 @@ else
   _llvm_version = '>= 3.3.0'
 endif
 
+_static_llvm = not get_option('shared-llvm')
+
 _llvm = get_option('llvm')
 if _llvm == 'auto'
   dep_llvm = dependency(
     'llvm', version : _llvm_version, modules : llvm_modules,
     required : with_amd_vk or with_gallium_radeonsi or with_gallium_swr or with_gallium_opencl,
+    static : _static_llvm
   )
   with_llvm = dep_llvm.found()
 elif _llvm == 'true'
-  dep_llvm = dependency('llvm', version : _llvm_version, modules : llvm_modules)
+  dep_llvm = dependency('llvm', version : _llvm_version, modules : llvm_modules, static : _static_llvm)
   with_llvm = true
 else
   dep_llvm = null_dep
