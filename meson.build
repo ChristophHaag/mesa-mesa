@@ -326,7 +326,7 @@ pre_args += '-DGLX_USE_TLS'
 if with_glx != 'disabled'
   if not (with_platform_x11 and with_any_opengl)
     error('Cannot build GLX support without X11 platform support and at least one OpenGL API')
-  elif with_glx == 'gallium-xlib' 
+  elif with_glx == 'gallium-xlib'
     if not with_gallium
       error('Gallium-xlib based GLX requires at least one gallium driver')
     elif not with_gallium_softpipe
@@ -334,7 +334,7 @@ if with_glx != 'disabled'
     elif with_dri
       error('gallium-xlib conflicts with any dri driver')
     endif
-  elif with_glx == 'xlib' 
+  elif with_glx == 'xlib'
     if with_dri
       error('xlib conflicts with any dri driver')
     endif
@@ -894,7 +894,7 @@ endif
 # case of cross compiling where we can use asm, and that's x86_64 -> x86 when
 # host OS == build OS, since in that case the build machine can run the host's
 # binaries.
-if meson.is_cross_build() 
+if meson.is_cross_build()
   if build_machine.system() != host_machine.system()
     # TODO: It may be possible to do this with an exe_wrapper (like wine).
     message('Cross compiling from one OS to another, disabling assembly.')
@@ -1159,6 +1159,8 @@ else
   _llvm_version = '>= 3.3.0'
 endif
 
+_static_llvm = not get_option('shared-llvm')
+
 _llvm = get_option('llvm')
 if _llvm == 'auto'
   dep_llvm = dependency(
@@ -1167,6 +1169,7 @@ if _llvm == 'auto'
     modules : llvm_modules,
     optional_modules : llvm_optional_modules,
     required : with_amd_vk or with_gallium_radeonsi or with_gallium_swr or with_gallium_opencl,
+    static : _static_llvm
   )
   with_llvm = dep_llvm.found()
 elif _llvm == 'true'
@@ -1175,6 +1178,7 @@ elif _llvm == 'true'
     version : _llvm_version,
     modules : llvm_modules,
     optional_modules : llvm_optional_modules,
+    static : _static_llvm,
   )
   with_llvm = true
 else
