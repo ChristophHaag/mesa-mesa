@@ -1666,7 +1666,12 @@ wsi_display_queue_present(struct wsi_swapchain *drv_chain,
    if (chain->status != VK_SUCCESS)
       return chain->status;
 
-   assert(image->state == WSI_IMAGE_DRAWING);
+   //assert(image->state == WSI_IMAGE_DRAWING);
+   if (image->state != WSI_IMAGE_DRAWING) {
+      printf("radv: ERROR: Image state != WSI_IMAGE_DRAWING\n"); {
+         return VK_SUCCESS;
+      }
+   }
    wsi_display_debug("present %d\n", image_index);
 
    pthread_mutex_lock(&wsi->wait_mutex);
