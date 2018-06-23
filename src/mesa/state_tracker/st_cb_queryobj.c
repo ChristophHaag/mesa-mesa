@@ -357,7 +357,10 @@ st_CheckQuery(struct gl_context *ctx, struct gl_query_object *q)
 {
    struct pipe_context *pipe = st_context(ctx)->pipe;
    struct st_query_object *stq = st_query_object(q);
-   assert(!q->Ready);   /* we should not get called if Ready is TRUE */
+   //assert(!q->Ready);   /* we should not get called if Ready is TRUE */
+   if (q->Ready) {
+      printf("Mesa: ERROR: st_CheckQuery called with query object being ready\n");
+   }
    q->Ready = get_query_result(pipe, stq, FALSE);
 }
 
