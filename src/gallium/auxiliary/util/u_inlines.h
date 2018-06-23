@@ -79,7 +79,10 @@ pipe_reference_described(struct pipe_reference *ptr,
    if(ptr != reference) {
       /* bump the reference.count first */
       if (reference) {
-         assert(pipe_is_referenced(reference));
+         //assert(pipe_is_referenced(reference));
+         if (!pipe_is_referenced(reference)) {
+            printf("mesa: ERROR: pipe_reference_described called but pipe not referenced!\n");
+         }
          p_atomic_inc(&reference->count);
          debug_reference(reference, get_desc, 1);
       }
