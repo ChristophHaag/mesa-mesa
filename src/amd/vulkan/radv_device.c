@@ -4826,3 +4826,24 @@ radv_GetDeviceGroupPeerMemoryFeatures(
 	                       VK_PEER_MEMORY_FEATURE_GENERIC_SRC_BIT |
 	                       VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
 }
+
+VkResult radv_QueryCurrentTimestampMESA(VkDevice _device, VkSurfaceKHR _surface,
+					VkCurrentTimestampMESA *timestamp)
+{
+	RADV_FROM_HANDLE(radv_device, device, _device);
+	VkResult result;
+
+	timestamp->deviceTimestamp = device->ws->query_value(device->ws,
+							     RADEON_TIMESTAMP);
+
+	result = wsi_common_convert_timestamp(
+		&device->physical_device->wsi_device,
+		_device,
+		_surface,
+		radv_get_current_time(),
+		&timestamp->surfaceTimestamp);
+	if (result != VK_SUCCESS)
+		return result;
+
+	return VK_SUCCESS;
+}

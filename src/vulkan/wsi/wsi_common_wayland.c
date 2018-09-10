@@ -911,7 +911,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (chain == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   result = wsi_swapchain_init(wsi_device, &chain->base, device,
+   result = wsi_swapchain_init(wsi_device, &chain->base, device, icd_surface,
                                pCreateInfo, pAllocator);
    if (result != VK_SUCCESS) {
       vk_free(pAllocator, chain);
@@ -1015,6 +1015,7 @@ wsi_wl_init_wsi(struct wsi_device *wsi_device,
    wsi->base.get_formats2 = wsi_wl_surface_get_formats2;
    wsi->base.get_present_modes = wsi_wl_surface_get_present_modes;
    wsi->base.create_swapchain = wsi_wl_surface_create_swapchain;
+   wsi->base.convert_timestamp = NULL;
 
    wsi_device->wsi[VK_ICD_WSI_PLATFORM_WAYLAND] = &wsi->base;
 

@@ -29,6 +29,7 @@
 #include "vk_alloc.h"
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_icd.h>
+#include <vulkan/vk_mesa_query_timestamp.h>
 
 /* This is guaranteed to not collide with anything because it's in the
  * VK_KHR_swapchain namespace but not actually used by the extension.
@@ -93,6 +94,7 @@ struct wsi_device {
    VkPhysicalDevice pdevice;
    VkPhysicalDeviceMemoryProperties memory_props;
    uint32_t queue_family_count;
+   float timestamp_period;
 
    bool supports_modifiers;
    uint64_t (*image_get_modifier)(VkImage image);
@@ -104,14 +106,18 @@ struct wsi_device {
    WSI_CB(BindImageMemory);
    WSI_CB(BeginCommandBuffer);
    WSI_CB(CmdCopyImageToBuffer);
+   WSI_CB(CmdResetQueryPool);
+   WSI_CB(CmdWriteTimestamp);
    WSI_CB(CreateBuffer);
    WSI_CB(CreateCommandPool);
    WSI_CB(CreateFence);
    WSI_CB(CreateImage);
+   WSI_CB(CreateQueryPool);
    WSI_CB(DestroyBuffer);
    WSI_CB(DestroyCommandPool);
    WSI_CB(DestroyFence);
    WSI_CB(DestroyImage);
+   WSI_CB(DestroyQueryPool);
    WSI_CB(EndCommandBuffer);
    WSI_CB(FreeMemory);
    WSI_CB(FreeCommandBuffers);
@@ -119,10 +125,14 @@ struct wsi_device {
    WSI_CB(GetImageMemoryRequirements);
    WSI_CB(GetImageSubresourceLayout);
    WSI_CB(GetMemoryFdKHR);
+   WSI_CB(GetPhysicalDeviceProperties);
    WSI_CB(GetPhysicalDeviceFormatProperties);
    WSI_CB(GetPhysicalDeviceFormatProperties2KHR);
+   WSI_CB(GetPhysicalDeviceQueueFamilyProperties);
+   WSI_CB(GetQueryPoolResults);
    WSI_CB(ResetFences);
    WSI_CB(QueueSubmit);
+   WSI_CB(QueryCurrentTimestampMESA);
    WSI_CB(WaitForFences);
 #undef WSI_CB
 
@@ -234,5 +244,28 @@ wsi_common_queue_present(const struct wsi_device *wsi,
                          VkQueue queue_h,
                          int queue_family_index,
                          const VkPresentInfoKHR *pPresentInfo);
+
+VkResult
+wsi_common_convert_timestamp(const struct wsi_device *wsi,
+                             VkDevice device_h,
+                             VkSurfaceKHR surface_h,
+                             uint64_t monotonic_timestamp,
+                             uint64_t *surface_timestamp);
+
+/* VK_GOOGLE_display_timing */
+VkResult
+wsi_common_get_refresh_cycle_duration(const struct wsi_device *wsi,
+                                      VkDevice device_h,
+                                      VkSwapchainKHR swapchain,
+                                      VkRefreshCycleDurationGOOGLE
+                                      *pDisplayTimingProperties);
+
+VkResult
+wsi_common_get_past_presentation_timing(const struct wsi_device *wsi,
+                                        VkDevice device_h,
+                                        VkSwapchainKHR swapchain,
+                                        uint32_t *pPresentationTimingCount,
+                                        VkPastPresentationTimingGOOGLE
+                                        *pPresentationTimings);
 
 #endif
