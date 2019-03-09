@@ -48,7 +48,7 @@ static inline uint64_t GetTimeStamp() {
 }
 
 static void
-query_frametime(struct hud_graph *gr)
+query_frametime(struct hud_graph *gr, struct pipe_context *ctx)
 {
    struct frametime_info *info = gr->query_data;
    uint64_t now =  GetTimeStamp();
@@ -77,7 +77,7 @@ query_frametime(struct hud_graph *gr)
 }
 
 static void
-free_query_data(void *p)
+free_query_data(void *p, struct pipe_context *ctx)
 {
    FREE(p);
 }
