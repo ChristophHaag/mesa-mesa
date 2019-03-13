@@ -139,7 +139,7 @@ static GLXFBConfigSGIX *dispatch_ChooseFBConfigSGIX(Display *dpy, int screen,
     if (pChooseFBConfigSGIX == NULL)
         return NULL;
 
-    ret = (*pChooseFBConfigSGIX)(dpy, screen, attrib_list, nelements);
+    ret = (*pChooseFBConfigSGIX)(dpy, screen, (int *) attrib_list, nelements);
     if (AddFBConfigsMapping(dpy, ret, nelements, dd)) {
         free(ret);
         return NULL;
@@ -230,7 +230,7 @@ static GLXPbuffer dispatch_CreateGLXPbufferSGIX(Display *dpy,
     if (pCreateGLXPbufferSGIX == NULL)
         return None;
 
-    ret = (*pCreateGLXPbufferSGIX)(dpy, config, width, height, attrib_list);
+    ret = (*pCreateGLXPbufferSGIX)(dpy, config, width, height, (int *) attrib_list);
     if (AddDrawableMapping(dpy, ret, dd)) {
         PFNGLXDESTROYGLXPBUFFERSGIXPROC pDestroyGLXPbufferSGIX;
 
